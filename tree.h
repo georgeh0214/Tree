@@ -1,6 +1,6 @@
 #include <iostream>
 #include <algorithm>
-#include <string.h>
+#include <string>
 
 #include "bitmap.h"
 
@@ -111,8 +111,8 @@ public:
     tree()
     {
         height = 0;
-        root = nullptr;
-        first_leaf = nullptr;
+        root = new allocate_leaf() Leaf();
+        first_leaf = root;
         printf("Size of Inner: %d\n", sizeof(Inner));
         printf("Size of Leaf: %d\n", sizeof(Leaf));
         printf("_XBEGIN_STARTED: %d\n", _XBEGIN_STARTED);

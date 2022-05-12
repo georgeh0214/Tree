@@ -10,13 +10,13 @@ override CFLAGS += -g -std=c++17 -pthread -mrtm -msse4.1 -mavx2 -Wall -O3 # -lje
 #CFLAGS=-g -std=c++17 -pthread -msse4.1 -mavx2 -Wall -O3 -fsanitize=undefined,implicit-conversion,nullability,float-divide-by-zero,unsigned-integer-overflow,bounds,bool
 
 # INCLUDE=-I./common
-# LIB=-lpmem -lpmemobj -ltbb
+LIB=-lpmem -lpmemobj -ltbb
 
-# COMMON_DEPENDS= ./common/tree_api.hpp ./common/lbtree.h ./common/lbtree.cc ./common/tree.h ./common/tree.cc ./common/keyinput.h ./common/mempool.h ./common/mempool.cc ./common/nodepref.h ./common/nvm-common.h ./common/nvm-common.cc ./common/performance.h
-# COMMON_SOURCES= ./common/lbtree.cc ./common/tree.cc ./common/mempool.cc ./common/nvm-common.cc
+COMMON_DEPENDS= tree_api.hpp tree.h tree.cc 
+COMMON_SOURCES= tree.cc
 
 # -----------------------------------------------------------------------------
-TARGETS=main
+TARGETS=main tree_wrapper
 
 #wbtree fptree
 
@@ -29,6 +29,9 @@ all: ${TARGETS}
 # 	${CC} -o $@ ${CFLAGS} ${INCLUDE} lbtree-src/lbtree.cc ${COMMON_SOURCES} ${LIB}
 main: main.cpp 
 	${CC} main.cpp ${CFLAGS}
+
+tree_wrapper: tree_wrapper.hpp tree_wrapper.cpp ${COMMON_DEPENDS}
+	${CC} -o libtree_wrapper.so ${CFLAGS} -ljemalloc -fPIC -shared tree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
 # -----------------------------------------------------------------------------
 clean:
-	-rm -rf a.out core *.s ${TARGETS} liblbtree_wrapper.so
+	-rm -rf a.out core *.s ${TARGETS} libtree_wrapper.so

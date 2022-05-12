@@ -27,7 +27,8 @@ all: ${TARGETS}
 # 	${CC} -o liblbtree_wrapper.so ${CFLAGS} -fPIC -shared ${INCLUDE} lbtree-src/lbtree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
 # lbtree: lbtree-src/lbtree.h lbtree-src/lbtree.cc ${COMMON_DEPENDS}
 # 	${CC} -o $@ ${CFLAGS} ${INCLUDE} lbtree-src/lbtree.cc ${COMMON_SOURCES} ${LIB}
-main: main.cpp ${CC} -o main ${CFLAGS}
+main: main.cpp 
+	${CC} main.cpp ${CFLAGS}
 # -----------------------------------------------------------------------------
 clean:
 	-rm -rf a.out core *.s ${TARGETS} liblbtree_wrapper.so

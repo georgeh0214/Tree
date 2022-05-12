@@ -56,59 +56,55 @@ Leaf::Leaf(const Leaf& leaf)
 
 void Leaf::insertEntry(key_type key, val_type val)
 {
-    int i = leaf->bitmap.first_zero();
-    leaf->ent[i].key = key;
-    leaf->ent[i].val = val;
-    leaf->bitmap.set(i);
+    int i = this->bitmap.first_zero();
+    this->ent[i].key = key;
+    this->ent[i].val = val;
+    this->bitmap.set(i);
 }
 
-bool tree::lookup(key_type key, val_type& val)
-{
-    Inner* cur;
-    Leaf* leaf;
-    uint64_t bits;
-    int i;
-    uint8_t key_hash = hashcode1B(key);
-RetryLookup:
-    if (_xbegin() != _XBEGIN_STARTED)
-        goto RetryLookup;
-    // Search inners
-    cur = (Inner*)(this->root);
-    for (i = this->height; i > 0; i--)
-    {
-        if (cur->lock())
-        {
-            _xabort(1);
-            goto RetryLookup;
-        }
-        cur = (Inner*)(cur->findChild(key));
-    }
+// bool tree::lookup(key_type key, val_type& val)
+// {
+//     Inner* cur;
+//     Leaf* leaf;
+//     uint64_t bits;
+//     int i;
 
-    // Search leaf
-    leaf = (Leaf*)cur;
-    if (leaf->isInsertLocked())
-    {
-        _xabort(2);
-        goto RetryLookup;
-    }
-    bits = leaf->bitmap.bits;
-    for (i = 0; bits != 0; i++) 
-    {
-        if (bits & 1)
-        {
-            count ++;
-            if (key == leaf->ent[i].key) // key found
-            {
-                val = leaf->ent[i].val;
-                _xend();
-                return true;
-            }
-        }
-        bits = bits >> 1;
-    }
-    _xend();
-    return false;
-}
+// RetryLookup:
+//     if (_xbegin() != _XBEGIN_STARTED)
+//         goto RetryLookup;
+//     // Search inners
+//     cur = (Inner*)(this->root);
+//     for (i = this->height; i > 0; i--)
+//     {
+//         if (cur->lock())
+//         {
+//             _xabort(1);
+//             goto RetryLookup;
+//         }
+//         cur = (Inner*)(cur->findChild(key));
+//     }
+
+//     // Search leaf
+//     leaf = (Leaf*)cur;
+//     if (leaf->isInsertLocked())
+//     {
+//         _xabort(2);
+//         goto RetryLookup;
+//     }
+//     bits = leaf->bitmap.bits;
+//     for (i = 0; bits != 0; i++) 
+//     {
+//         if ((bits & 1) && key == leaf->ent[i].key) // key found
+//         {
+//             val = leaf->ent[i].val;
+//             _xend();
+//             return true;
+//         }
+//         bits = bits >> 1;
+//     }
+//     _xend();
+//     return false;
+// }
 
 bool tree::insert(key_type key, val_type val) 
 {
@@ -120,7 +116,6 @@ bool tree::insert(key_type key, val_type val)
     Leaf* leaf;
     uint64_t bits;
     int i, r, count;
-    uint8_t key_hash = hashcode1B(key);
 
 RetryInsert: 
     if (_xbegin() != _XBEGIN_STARTED)
@@ -150,6 +145,7 @@ RetryInsert:
         goto RetryInsert;
     }
     bits = leaf->bitmap.bits;
+    count = 0;
     for (i = 0; bits != 0; i++) 
     {
         if (bits & 1)
@@ -183,11 +179,9 @@ RetryInsert:
     else // split insert
     {
         std::sort(leaf->ent, leaf->ent + LEAF_KEY_NUM, leafEntryCompareFunc); // sort all entries
-#define MID (LEAF_KEY_NUM / 2)
-        key_type split_key = leaf->ent[MID].key; // middle key as split key
-        bits = leaf->bitmap.bits ^ (offset >> MID); // set right half bits in bitmap to 0
-        leaf->bitmap.setBits(bits);
-        Leaf* new_leaf = new allocate_leaf() Leaf(leaf); // alloc new leaf
+        key_type split_key = leaf->ent[LEAF_KEY_NUM / 2].key; // middle key as split key
+        leaf->bitmap.clearRightHalf(); // set right half bits in leaf bitmap to 0
+        Leaf* new_leaf = new (allocate_leaf()) Leaf(*leaf); // alloc new leaf
         leaf->next[1 - leaf->alt] = new_leaf; // track using unused ptr
         new_leaf->bitmap.flip(); // set bitmap of new leaf
         if (key < split_key) // insert new entry
@@ -199,6 +193,7 @@ RetryInsert:
             leaf->releaseInsertLock();
         // Update inners
         void* new_child = (void*)new_leaf;
+        Inner* new_inner;
         for (int level = 1; level <= this->height; level++)
         {
             cur = anc[level];
@@ -214,7 +209,7 @@ RetryInsert:
                 cur->lock() = 0;
                 return true;
             }
-            Inner* new_inner = new allocate_inner() Inner(); // else split inner
+            new_inner = new (allocate_inner()) Inner(); // else split inner
 #define LEFT_KEY_NUM (INNER_KEY_NUM / 2)
 #define RIGHT_KEY_NUM (INNER_KEY_NUM - LEFT_KEY_NUM)
             if (p <= LEFT_KEY_NUM) // insert to left inner
@@ -244,7 +239,7 @@ RetryInsert:
             new_inner->lock() = 0;
         }
 
-        new_inner = new allocate_inner() Inner();
+        new_inner = new (allocate_inner()) Inner();
         new_inner->lock() = 1;
         new_inner->count() = 1;
         new_inner->ent[0].child = this->root;

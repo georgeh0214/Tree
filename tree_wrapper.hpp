@@ -3,7 +3,6 @@
 #include "tree.h"
 #include <thread>
 #include <sys/types.h>
-#include <string.h>
 
 // #define DEBUG_MSG
 

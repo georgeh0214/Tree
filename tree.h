@@ -1,37 +1,11 @@
 #include <iostream>
 #include <algorithm>
-#include <string>
+#include <cstring>
 
+#include <immintrin.h>
 #include "bitmap.h"
 
-// #define PM
-// #define Binary_Search
-
-#define INNER_KEY_NUM 14
-#define LEAF_KEY_NUM 14 // <= 64 for now, recommand 14/30/46/62
-#define MAX_HEIGHT 32 // should be enough
-
-typedef uint64_t key_type; // >= 8 bytes
-typedef void* val_type;
-
-inline static uint8_t getOneByteHash(key_type key)
-{
-    uint8_t oneByteHashKey = std::_Hash_bytes(&key, sizeof(key_type), 1) & 0xff;
-    return oneByteHashKey;
-}
-
-inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
-{
-    return a.key < b.key; 
-}
-
-static const void* allocate_leaf() { return new Leaf; }
-
-static const void* allocate_inner() { return new Inner; }
-
 /*------------------------------------------------------------------------*/
-
-static const uint64_t offset = (uint64_t)(-1) >> (64 - LEAF_KEY_NUM);
 static const uint64_t insert_locked = 1 << 3;
 static const uint64_t split_locked = 1 << 2;
 static const uint64_t update_locked = 1 << 1;
@@ -56,7 +30,10 @@ struct LeafEntry
     val_type val;
 };
 
-
+inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
+{
+    return a.key < b.key; 
+}
 
 class Inner
 {
@@ -64,9 +41,9 @@ public:
     InnerEntry ent[INNER_KEY_NUM + 1]; // InnerMeta stored in first key
 
     Inner() { count() = 0; lock() = 0; }
-    ~Inner() { for (size_t i = 0; i <= count(); i++) { delete this->ent[i].child; } }
-    int& lock() { return (InnerMeta*)(this)->lock; }
-    int& count() { return (InnerMeta*)(this)->count; }
+    // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
+    int& lock() { return ((InnerMeta*)(this))->lock; }
+    int& count() { return ((InnerMeta*)(this))->count; }
     void* findChildSetPos(key_type key, short* pos);
     void* findChild(key_type key);
 
@@ -100,6 +77,9 @@ public:
     void insertEntry(key_type key, val_type val);
 };
 
+static void* allocate_inner() { return new Inner; }
+
+static void* allocate_leaf() { return new Leaf; }
 
 class tree
 {
@@ -111,10 +91,10 @@ public:
     tree()
     {
         height = 0;
-        root = new allocate_leaf() Leaf();
-        first_leaf = root;
-        printf("Size of Inner: %d\n", sizeof(Inner));
-        printf("Size of Leaf: %d\n", sizeof(Leaf));
+        root = new (allocate_leaf()) Leaf();
+        first_leaf = (Leaf*)root;
+        printf("Size of Inner: %lu\n", sizeof(Inner));
+        printf("Size of Leaf: %lu\n", sizeof(Leaf));
         printf("_XBEGIN_STARTED: %d\n", _XBEGIN_STARTED);
         printf("_XABORT_EXPLICIT: %d\n", _XABORT_EXPLICIT);
         printf("_XABORT_RETRY: %d\n", _XABORT_RETRY);
@@ -126,7 +106,7 @@ public:
 
     ~tree()
     {
-        delete root;
+        // delete (Leaf*)root; ToDo: 
     }
 
     // return true and set val only if lookup successful, 
@@ -145,3 +125,11 @@ public:
     size_t rangeScan(key_type start_key, size_t scan_size, void* result);
 
 };
+
+static inline unsigned long long rdtsc(void)
+{
+   unsigned hi, lo;
+   __asm__ __volatile__("rdtsc"
+                        : "=a"(lo), "=d"(hi));
+   return ((unsigned long long)lo) | (((unsigned long long)hi) << 32);
+}

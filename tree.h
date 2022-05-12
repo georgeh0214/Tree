@@ -1,262 +1,147 @@
-#include "iostream"
+#include <iostream>
+#include <algorithm>
+#include <string.h>
+
+#include "bitmap.h"
+
+// #define PM
+// #define Binary_Search
 
 #define INNER_KEY_NUM 14
-#define LEAF_KEY_NUM 15
+#define LEAF_KEY_NUM 14 // <= 64 for now, recommand 14/30/46/62
+#define MAX_HEIGHT 32 // should be enough
 
 typedef uint64_t key_type; // >= 8 bytes
-typedef void* val_type; // >= 8 bytes
+typedef void* val_type;
 
-/*--------------------------------------------------------*/
+inline static uint8_t getOneByteHash(key_type key)
+{
+    uint8_t oneByteHashKey = std::_Hash_bytes(&key, sizeof(key_type), 1) & 0xff;
+    return oneByteHashKey;
+}
 
-#define INNER_MAX_IDX INNER_KEY_NUM - 1
-#define LEAF_MAX_IDX LEAF_KEY_NUM - 1
+inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
+{
+    return a.key < b.key; 
+}
 
-struct Inner_Entry
+static const void* allocate_leaf() { return new Leaf; }
+
+static const void* allocate_inner() { return new Inner; }
+
+/*------------------------------------------------------------------------*/
+
+static const uint64_t offset = (uint64_t)(-1) >> (64 - LEAF_KEY_NUM);
+static const uint64_t insert_locked = 1 << 3;
+static const uint64_t split_locked = 1 << 2;
+static const uint64_t update_locked = 1 << 1;
+static const uint64_t delete_locked = 1;
+
+
+struct InnerEntry
 {
     key_type key;
-    Node* child;
+    void* child;
 };
 
-struct Leaf_Entry
+struct InnerMeta
+{
+    int lock;
+    int count;
+};
+
+struct LeafEntry
 {
     key_type key;
     val_type val;
 };
 
-class Node
-{
-};
 
-class Inner: public Node
+
+class Inner
 {
 public:
-    Inner_Entry ent[INNER_KEY_NUM];
+    InnerEntry ent[INNER_KEY_NUM + 1]; // InnerMeta stored in first key
 
-    int& lock() { return }
-    int count() { return (int)ent[0].key; }
-
-};
-
-class Leaf: public Node
-{
-public:
-    uint64_t version_lock;
-    Leaf_Entry ent[LEAF_KEY_NUM];
-
+    Inner() { count() = 0; lock() = 0; }
+    ~Inner() { for (size_t i = 0; i <= count(); i++) { delete this->ent[i].child; } }
+    int& lock() { return (InnerMeta*)(this)->lock; }
+    int& count() { return (InnerMeta*)(this)->count; }
+    void* findChildSetPos(key_type key, short* pos);
+    void* findChild(key_type key);
 
 };
 
-typedef union bleafMeta
-{
-    unsigned long long word8B[2];
-    struct
-    {
-        uint16_t bitmap : 14;
-        uint16_t lock : 1;
-        uint16_t alt : 1;
-        unsigned char fgpt[LEAF_KEY_NUM]; /* fingerprints */
-    } v;
-} bleafMeta;
 
-/**
- * bleaf: leaf node
- *
- * We guarantee that each leaf must have >=1 key.
- */
-class bleaf
+class Leaf
 {
 public:
-    uint16_t bitmap : 14;
-    uint16_t lock : 1;
-    uint16_t alt : 1;
-    unsigned char fgpt[LEAF_KEY_NUM]; /* fingerprints */
-    IdxEntry ent[LEAF_KEY_NUM];
-    bleaf *next[2];
+    uint64_t version_lock : 59; // 8 byte --> 59 bits version number, 1 bit alt, 1 bit insert/split/update/delete lock
+    uint64_t alt : 1;
+    uint64_t inset_lock : 1;
+    uint64_t split_lock : 1;
+    uint64_t update_lock : 1;
+    uint64_t delete_lock : 1;
+    Bitmap bitmap; // 8 byte
+    LeafEntry ent[LEAF_KEY_NUM];
+    Leaf* next[2]; // 16 byte
 
-public:
-    key_type &k(int idx) { return ent[idx].k; }
-    Pointer8B &ch(int idx) { return ent[idx].ch; }
+    Leaf();
+    Leaf(const Leaf& leaf);
+    ~Leaf();
+    inline bool isInsertLocked() { return version_lock & insert_locked; }
+    inline bool isSplitLocked() { return version_lock & split_locked; }
+    inline bool isUpdateLocked() { return version_lock & update_locked; }
+    inline bool isDeleteLocked() { return version_lock & delete_locked; }
 
-    int num() { return countBit(bitmap); }
-    bleaf *nextSibling() { return next[alt]; }
+    inline void setInsertLock() { version_lock |= insert_locked; }
+    inline void releaseInsertLock() { version_lock ^= insert_locked; }
 
-    bool isFull(void) { return (bitmap == 0x3fff); }
+    void insertEntry(key_type key, val_type val);
+};
 
-    void setBothWords(bleafMeta *m)
-    {
-        bleafMeta *my_meta = (bleafMeta *)this;
-        my_meta->word8B[1] = m->word8B[1];
-        my_meta->word8B[0] = m->word8B[0];
-    }
 
-    void setWord0(bleafMeta *m)
-    {
-        bleafMeta *my_meta = (bleafMeta *)this;
-        my_meta->word8B[0] = m->word8B[0];
-    }
-
-    void movnt64(uint64_t *dest, uint64_t const src, bool front, bool back) {
-        if (front) sfence();
-        _mm_stream_si64((long long int *)dest, (long long int) src);
-        if (back) sfence();
-    }
-
-    void setWord0_temporal(bleafMeta *m){
-       bleafMeta * my_meta= (bleafMeta *)this;
-       movnt64((uint64_t*)&my_meta->word8B[0], m->word8B[0], false, true);
-    }
-
-    void setBothWords_temporal(bleafMeta *m) {
-       bleafMeta * my_meta= (bleafMeta *)this;
-       my_meta->word8B[1]= m->word8B[1];
-       movnt64((uint64_t*)&my_meta->word8B[0], m->word8B[0], false, true);
-    }
-
-}; // bleaf
-
-/* ---------------------------------------------------------------------- */
-
-class treeMeta
+class tree
 {
 public:
-    int root_level; // leaf: level 0, parent of leaf: level 1
-    Pointer8B tree_root;
-    bleaf **first_leaf; // on NVM
+    void* root;
+    int height; // leaf at level 0
+    Leaf* first_leaf;
 
-public:
-    treeMeta(void *nvm_address, bool recover = false)
+    tree()
     {
-        root_level = 0;
-        tree_root = NULL;
-        first_leaf = (bleaf **)nvm_address;
-
-        if (!recover)
-            setFirstLeaf(NULL);
+        height = 0;
+        root = nullptr;
+        first_leaf = nullptr;
+        printf("Size of Inner: %d\n", sizeof(Inner));
+        printf("Size of Leaf: %d\n", sizeof(Leaf));
+        printf("_XBEGIN_STARTED: %d\n", _XBEGIN_STARTED);
+        printf("_XABORT_EXPLICIT: %d\n", _XABORT_EXPLICIT);
+        printf("_XABORT_RETRY: %d\n", _XABORT_RETRY);
+        printf("_XABORT_CONFLICT: %d\n", _XABORT_CONFLICT);
+        printf("_XABORT_CAPACITY: %d\n", _XABORT_CAPACITY);
+        printf("_XABORT_DEBUG: %d\n", _XABORT_DEBUG);
+        printf("_XABORT_NESTED: %d\n", _XABORT_NESTED);
     }
 
-    void setFirstLeaf(bleaf *leaf)
+    ~tree()
     {
-        *first_leaf = leaf;
-        clwb(first_leaf);
-        sfence();
+        delete root;
     }
 
-}; // treeMeta
+    // return true and set val only if lookup successful, 
+    bool lookup(key_type key, val_type& val);
 
-/* ---------------------------------------------------------------------- */
+    // return true if insert successful
+    bool insert(key_type key, val_type val);
 
-class lbtree : public tree
-{
-public: // root and level
-    treeMeta *tree_meta;
+    // return true if delete successful
+    bool del(key_type key);
 
-public:
-    lbtree(void *nvm_address, bool recover = false)
-    {
-        tree_meta = new treeMeta(nvm_address, recover);
-        if (!tree_meta)
-        {
-            perror("new");
-            exit(1);
-        }
-    }
+    // return true if entry with target key is found and val is set to new_val
+    bool update(key_type key, val_type new_val);
 
-    ~lbtree()
-    {
-        delete tree_meta;
-    }
+    // return # of entries scanned
+    size_t rangeScan(key_type start_key, size_t scan_size, void* result);
 
-private:
-    int bulkloadSubtree(keyInput *input, int start_key, int num_key,
-                        float bfill, int target_level,
-                        Pointer8B pfirst[], int n_nodes[]);
-
-    int bulkloadToptree(Pointer8B ptrs[], key_type keys[], int num_key,
-                        float bfill, int cur_level, int target_level,
-                        Pointer8B pfirst[], int n_nodes[]);
-
-    void getMinMaxKey(bleaf *p, key_type &min_key, key_type &max_key);
-
-    void getKeyPtrLevel(Pointer8B pnode, int pnode_level, key_type left_key,
-                        int target_level, Pointer8B ptrs[], key_type keys[], int &num_nodes,
-                        bool free_above_level_nodes);
-
-    // sort pos[start] ... pos[end] (inclusively)
-    void qsortBleaf(bleaf *p, int start, int end, int pos[]);
-
-public:
-    // bulkload a tree and return the root level
-    // use multiple threads to do the bulkloading
-    int bulkload(int keynum, keyInput *input, float bfill);
-
-    void randomize(Pointer8B pnode, int level);
-    void randomize()
-    {
-        srand48(12345678);
-        randomize(tree_meta->tree_root, tree_meta->root_level);
-    }
-
-    // given a search key, perform the search operation
-    // return the leaf node pointer and the position within leaf node
-    void *lookup(key_type key, int *pos);
-
-    void *get_recptr(void *p, int pos)
-    {
-        return ((bleaf *)p)->ch(pos);
-    }
-
-    // insert (key, ptr)
-    void insert(key_type key, void *ptr);
-
-    // delete key
-    void del(key_type key);
-
-    // // Range scan -- Author: Lu Baotong
-    // int range_scan_by_size(const key_type& key,  uint32_t to_scan, char* result);
-    // int range_scan_in_one_leaf(bleaf *lp, const key_type& key, uint32_t to_scan, std::pair<key_type, void*>* result);
-    // int add_to_sorted_result(std::pair<key_type, void*>* result, std::pair<key_type, void*>* new_record, int total_size, int cur_idx);
-
-    // Range Scan -- Author: George He
-    int rangeScan(key_type key,  uint32_t scan_size, char* result);
-    bleaf* lockSibling(bleaf* lp);
-    
-private:
-    void print(Pointer8B pnode, int level);
-    void check(Pointer8B pnode, int level, key_type &start, key_type &end, bleaf *&ptr);
-    void checkFirstLeaf(void);
-
-public:
-    void print()
-    {
-        print(tree_meta->tree_root, tree_meta->root_level);
-    }
-
-    void check(key_type *start, key_type *end)
-    {
-        bleaf *ptr = NULL;
-        check(tree_meta->tree_root, tree_meta->root_level, *start, *end, ptr);
-        checkFirstLeaf();
-    }
-
-    int level() { return tree_meta->root_level; }
-
-}; // lbtree
-
-void initUseful();
-
-#ifdef VAR_KEY
-static int vkcmp(char* a, char* b) {
-/*
-    auto n = key_size_;
-    while(n--)
-        if( *a != *b )
-            return *a - *b;
-        else
-            a++,b++;
-    return 0;
-*/
-    return memcmp(a, b, key_size_);
-}
-#endif
-/* ---------------------------------------------------------------------- */
-#endif /* _LBTREE_H */
+};

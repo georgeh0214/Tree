@@ -1,27 +1,16 @@
 #include <iostream>
 #include <algorithm>
 #include <cstring>
+#include <atomic>
 
-#include <immintrin.h>
 #include "bitmap.h"
 
 /*------------------------------------------------------------------------*/
-static const uint64_t insert_locked = 1 << 3;
-static const uint64_t split_locked = 1 << 2;
-static const uint64_t update_locked = 1 << 1;
-static const uint64_t delete_locked = 1;
-
 
 struct InnerEntry
 {
     key_type key;
-    void* child;
-};
-
-struct InnerMeta
-{
-    int lock;
-    int count;
+    Node* child;
 };
 
 struct LeafEntry
@@ -35,30 +24,47 @@ inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
     return a.key < b.key; 
 }
 
-class Inner
+class Node
 {
 public:
-    InnerEntry ent[INNER_KEY_NUM + 1]; // InnerMeta stored in first key
-
-    Inner() { count() = 0; lock() = 0; }
-    // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
-    int& lock() { return ((InnerMeta*)(this))->lock; }
-    int& count() { return ((InnerMeta*)(this))->count; }
-    void* findChildSetPos(key_type key, short* pos);
-    void* findChild(key_type key);
-
+    std::atomic<uint64_t> versionLock{0b100};
+// general
+    bool isLocked(uint64_t& lock) { lock = versionLock.load(); return lock | 0b10; }
+    bool checkVersion(uint64_t version) { return version == versionLock.load(); }
+    bool lock() {
+        uint64_t version;
+        if (version = versionLock.load() | 0b10)
+            return false;
+        return versionLock.compare_exchange_strong(version, version | 0b10);
+    }
+    bool upgradeToWriter(uint64_t version) {
+        return versionLock.compare_exchange_strong(version, version | 0b10);
+    }
+    void unlock() { versionLock.fetch_add(0b10); }
+// leaf only
+    bool alt() { versionLock.load() & 0b1; }
+    void unlockFlipAlt(bool alt) { alt? versionLock.fetch_add(0b1) : versionLock.fetch_add(0b11); }
 };
 
-
-class Leaf
+class Inner : public Node
 {
 public:
-    uint64_t version_lock : 59; // 8 byte --> 59 bits version number, 1 bit alt, 1 bit insert/split/update/delete lock
-    uint64_t alt : 1;
-    uint64_t inset_lock : 1;
-    uint64_t split_lock : 1;
-    uint64_t update_lock : 1;
-    uint64_t delete_lock : 1;
+    InnerEntry ent[INNER_KEY_NUM + 1]; // count stored in first key
+
+    Inner() { count() = 0; }
+    // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
+    uint64_t& count() { return *((uint64_t*)(ent)); }
+    bool isFull() { return count() == INNER_KEY_NUM; }
+
+    Node* findChildSetPos(key_type key, short* pos);
+    Node* findChild(key_type key);
+
+
+} __attribute__((aligned(64)));
+
+class Leaf : public Node
+{
+public:
     Bitmap bitmap; // 8 byte
     LeafEntry ent[LEAF_KEY_NUM];
     Leaf* next[2]; // 16 byte
@@ -66,16 +72,9 @@ public:
     Leaf();
     Leaf(const Leaf& leaf);
     ~Leaf();
-    inline bool isInsertLocked() { return version_lock & insert_locked; }
-    inline bool isSplitLocked() { return version_lock & split_locked; }
-    inline bool isUpdateLocked() { return version_lock & update_locked; }
-    inline bool isDeleteLocked() { return version_lock & delete_locked; }
-
-    inline void setInsertLock() { version_lock |= insert_locked; }
-    inline void releaseInsertLock() { version_lock ^= insert_locked; }
 
     void insertEntry(key_type key, val_type val);
-};
+} __attribute__((aligned(256)));
 
 static void* allocate_inner() { return new Inner; }
 
@@ -84,7 +83,7 @@ static void* allocate_leaf() { return new Leaf; }
 class tree
 {
 public:
-    void* root;
+    Node* root;
     int height; // leaf at level 0
     Leaf* first_leaf;
 
@@ -93,15 +92,6 @@ public:
         height = 0;
         root = new (allocate_leaf()) Leaf();
         first_leaf = (Leaf*)root;
-        printf("Size of Inner: %lu\n", sizeof(Inner));
-        printf("Size of Leaf: %lu\n", sizeof(Leaf));
-        printf("_XBEGIN_STARTED: %d\n", _XBEGIN_STARTED);
-        printf("_XABORT_EXPLICIT: %d\n", _XABORT_EXPLICIT);
-        printf("_XABORT_RETRY: %d\n", _XABORT_RETRY);
-        printf("_XABORT_CONFLICT: %d\n", _XABORT_CONFLICT);
-        printf("_XABORT_CAPACITY: %d\n", _XABORT_CAPACITY);
-        printf("_XABORT_DEBUG: %d\n", _XABORT_DEBUG);
-        printf("_XABORT_NESTED: %d\n", _XABORT_NESTED);
     }
 
     ~tree()

@@ -30,11 +30,11 @@ class Node
 public:
     std::atomic<uint64_t> versionLock{0b100};
 // general
-    bool isLocked(uint64_t& lock) { lock = versionLock.load(); return lock | 0b10; }
+    bool isLocked(uint64_t& lock) { lock = versionLock.load(); return lock & 0b10; }
     bool checkVersion(uint64_t version) { return version == versionLock.load(); }
     bool lock() {
         uint64_t version = versionLock.load();
-        if (version | 0b10)
+        if (version & 0b10)
             return false;
         return versionLock.compare_exchange_strong(version, version | 0b10);
     }

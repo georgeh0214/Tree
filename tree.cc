@@ -40,13 +40,8 @@ Node* Inner::findChild(key_type key)
     for (i = 1; i <= this->count(); i++)
         if (key <= this->ent[i].key)
             break;
-    return this->ent[i].child;
+    return this->ent[--i].child;
 #endif
-}
-
-Leaf::Leaf() 
-{
-//    std::memset(this, 0, sizeof(Leaf));
 }
 
 Leaf::Leaf(const Leaf& leaf) 
@@ -117,7 +112,6 @@ bool tree::insert(key_type key, val_type val)
     Leaf* leaf;
     int i, r, count;
 
-
 RetryInsert: 
     if (!this->root->lock())
         goto RetryInsert;
@@ -176,24 +170,40 @@ RetryInsert:
     }
     else // split insert
     {
-        std::sort(leaf->ent, leaf->ent + LEAF_KEY_NUM, leafEntryCompareFunc); // sort all entries
-        key_type split_key = leaf->ent[LEAF_KEY_NUM / 2].key; // middle key as split key
-        leaf->bitmap.clearRightHalf(); // set right half bits in leaf bitmap to 0
+        // sort indexes of leaf entries, find middle split key
+        int sorted_pos[LEAF_KEY_NUM];
+        for (i = 0; i < LEAF_KEY_NUM; i++)
+            sorted_pos[i] = i;
+        LeafEntry* entries = leaf->ent;
+        std::sort(sorted_pos, sorted_pos + LEAF_KEY_NUM, [entries](int i, int j){ return entries[i].key < entries[j].key; });
+        int split_pos = LEAF_KEY_NUM / 2;
+        key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
         bool alt = leaf->alt();
-        Leaf* new_leaf = new (allocate_leaf()) Leaf(*leaf); // alloc new leaf
+
+        // alloc new leaf
+        Leaf* new_leaf = new (allocate_leaf()) Leaf(*leaf);
         leaf->next[1 - alt] = new_leaf; // track in unused ptr
-        new_leaf->bitmap.flip(); // set bitmap of new leaf
-        if (key < split_key) // insert new entry
+
+        // set bitmap of both leaves
+        for (i = 0; i < split_pos; i++)
+            new_leaf->bitmap.reset(sorted_pos[i]);
+        leaf->bitmap.setBits(new_leaf->bitmap.bits);
+        leaf->bitmap.flip();
+
+        // insert new entry, unlock leaf if not root
+        if (key <= split_key) 
             leaf->insertEntry(key, val);
         else
             new_leaf->insertEntry(key, val);
         new_leaf->unlock();
         if (this->height > 0)
             leaf->unlockFlipAlt(alt);
+
         // Update inners
         Node* new_child = new_leaf;
         Inner* new_inner;
-        for (int level = 1; level <= this->height; level++)
+        int h = this->height;
+        for (int level = 1; level <= h; level++)
         {
             current = anc[level];
             count = current->count();
@@ -224,8 +234,8 @@ RetryInsert:
             {
                 for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; i >= p; i--, r--)
                     new_inner->ent[r] = current->ent[i];
-                new_inner->ent[p].key = split_key;
-                new_inner->ent[p].child = new_child;
+                new_inner->ent[r].key = split_key;
+                new_inner->ent[r].child = new_child;
                 for (--r; r >= 0; r--, i--)
                     new_inner->ent[r] = current->ent[i];
             }
@@ -235,6 +245,7 @@ RetryInsert:
             new_inner->count() = RIGHT_KEY_NUM;
         }
 
+        // new root
         new_inner = new (allocate_inner()) Inner();
         while (!new_inner->lock()) {}
         new_inner->count() = 1;

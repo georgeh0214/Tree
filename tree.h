@@ -70,7 +70,7 @@ public:
     LeafEntry ent[LEAF_KEY_NUM];
     Leaf* next[2]; // 16 byte
 
-    Leaf();
+    Leaf() {}
     Leaf(const Leaf& leaf);
     ~Leaf();
 
@@ -90,7 +90,8 @@ public:
 
     tree()
     {
-	printf("New Tree.\n");
+        printf("Inner size:%d \n", sizeof(Inner));
+        printf("Leaf size:%d \n", sizeof(Leaf));
         height = 0;
         root = new (allocate_leaf()) Leaf();
         first_leaf = (Leaf*)root;

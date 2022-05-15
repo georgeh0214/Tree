@@ -7,6 +7,7 @@
 
 /*------------------------------------------------------------------------*/
 
+class Node;
 struct InnerEntry
 {
     key_type key;
@@ -32,8 +33,8 @@ public:
     bool isLocked(uint64_t& lock) { lock = versionLock.load(); return lock | 0b10; }
     bool checkVersion(uint64_t version) { return version == versionLock.load(); }
     bool lock() {
-        uint64_t version;
-        if (version = versionLock.load() | 0b10)
+        uint64_t version = versionLock.load();
+        if (version | 0b10)
             return false;
         return versionLock.compare_exchange_strong(version, version | 0b10);
     }
@@ -42,7 +43,7 @@ public:
     }
     void unlock() { versionLock.fetch_add(0b10); }
 // leaf only
-    bool alt() { versionLock.load() & 0b1; }
+    bool alt() { return versionLock.load() & 0b1; }
     void unlockFlipAlt(bool alt) { alt? versionLock.fetch_add(0b1) : versionLock.fetch_add(0b11); }
 };
 
@@ -76,9 +77,9 @@ public:
     void insertEntry(key_type key, val_type val);
 } __attribute__((aligned(256)));
 
-static void* allocate_inner() { return new Inner; }
+static Inner* allocate_inner() { return new Inner; }
 
-static void* allocate_leaf() { return new Leaf; }
+static Leaf* allocate_leaf() { return new Leaf; }
 
 class tree
 {
@@ -89,6 +90,7 @@ public:
 
     tree()
     {
+	printf("New Tree.\n");
         height = 0;
         root = new (allocate_leaf()) Leaf();
         first_leaf = (Leaf*)root;

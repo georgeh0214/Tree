@@ -14,7 +14,7 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
     *pos = r;
     return this->ent[r].child;
 #else
-    int i;
+    uint64_t i;
     for (i = 1; i <= this->count(); i++)
         if (key <= this->ent[i].key)
             break;
@@ -36,7 +36,7 @@ Node* Inner::findChild(key_type key)
     }
     return this->ent[r].child;
 #else
-    int i;
+    uint64_t i;
     for (i = 1; i <= this->count(); i++)
         if (key <= this->ent[i].key)
             break;
@@ -46,7 +46,7 @@ Node* Inner::findChild(key_type key)
 
 Leaf::Leaf() 
 {
-    std::memset(this, 0, sizeof(Leaf));
+//    std::memset(this, 0, sizeof(Leaf));
 }
 
 Leaf::Leaf(const Leaf& leaf) 
@@ -65,9 +65,9 @@ void Leaf::insertEntry(key_type key, val_type val)
 bool tree::lookup(key_type key, val_type& val)
 {
     uint64_t bits, currentVersion, previousVersion;
-    Node* current, previous;
+    Node* current, * previous;
     Leaf* leaf;
-    int i, r, count;
+    int i;
     bool ret;
 
 RetryLookup:
@@ -112,8 +112,8 @@ bool tree::insert(key_type key, val_type val)
     thread_local Inner* anc[MAX_HEIGHT];
     thread_local short pos[MAX_HEIGHT];
 
-    uint64_t bits, currentVersion, previousVersion;
-    Inner* current, previous;
+    uint64_t bits;
+    Inner* current, * previous;
     Leaf* leaf;
     int i, r, count;
 
@@ -131,10 +131,10 @@ RetryInsert:
         {
             if (!current->lock())
             {
-                previous.unlock();
+                previous->unlock();
                 goto RetryInsert;
             }
-            previous.unlock();
+            previous->unlock();
             previous = current;
         }
     }
@@ -144,11 +144,11 @@ RetryInsert:
         leaf = (Leaf*)(current->findChildSetPos(key, &pos[i]));
         if (!leaf->lock())
         {
-            previous.unlock();
+            previous->unlock();
             goto RetryInsert;
         }
         if (!leaf->bitmap.is_full())
-            previous.unlock();
+            previous->unlock();
     }
     else
         leaf = (Leaf*)current;

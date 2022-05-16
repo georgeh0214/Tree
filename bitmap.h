@@ -4,6 +4,7 @@
 #define INNER_KEY_NUM 14
 #define LEAF_KEY_NUM 14 // <= 64 for now, recommand 14/30/46/62
 #define MAX_HEIGHT 32 // should be enough
+#define EARLY_SPLIT 2
 
 typedef uint64_t key_type; // >= 8 bytes
 typedef void* val_type;
@@ -14,10 +15,10 @@ inline static uint8_t getOneByteHash(key_type key)
     return oneByteHashKey;
 }
 
+/*------------------------------------------------------------------------*/
+
 static const uint64_t OFFSET = (uint64_t)(-1) >> (64 - LEAF_KEY_NUM);
 static const int MID = LEAF_KEY_NUM / 2;
-
-#define EARLY_SPLIT 2
 
 class Bitmap
 {

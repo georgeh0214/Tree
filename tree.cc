@@ -1,5 +1,6 @@
 #include "tree.h"
 
+// Inner
 Node* Inner::findChildSetPos(key_type key, short* pos)
 {
 #ifdef Binary_Search
@@ -44,6 +45,7 @@ Node* Inner::findChild(key_type key)
 #endif
 }
 
+// Leaf
 Leaf::Leaf(const Leaf& leaf) 
 {
     memcpy(this, &leaf, sizeof(Leaf));
@@ -57,16 +59,130 @@ void Leaf::insertEntry(key_type key, val_type val)
     this->bitmap.set(i);
 }
 
+int Leaf::findKey(key_type key)
+{
+    uint64_t bits = this->bitmap.bits;
+    for (int i = 0; bits != 0; i++) 
+    {
+        if ((bits & 1) && key == this->ent[i].key) // key found
+            return i;
+        bits = bits >> 1;
+    }
+    return -1;
+}
+
+// Tree
+Leaf* tree::findLeaf(key_type key, uint64_t& version, bool lock)
+{
+    uint64_t currentVersion, previousVersion;
+    Node* current;
+    Inner* previous;
+    Leaf* leaf;
+    int i;
+
+RetryFindLeaf: 
+    current = this->root;
+    if (current->isLocked(currentVersion) || current != this->root)
+        goto RetryFindLeaf;
+    for (i = this->height; i > 0; i--)
+    {
+        previous = (Inner*)current;
+        previousVersion = currentVersion;
+        current = ((Inner*)current)->findChild(key);
+        if (!previous->checkVersion(previousVersion) || current->isLocked(currentVersion))
+            goto RetryFindLeaf;
+    }
+    leaf = (Leaf*)current;
+    if (lock && !current->upgradeToWriter(currentVersion))
+        goto RetryFindLeaf;
+    version = currentVersion;
+    return leaf;
+}
+
+Leaf* tree::findLeafAssumeSplit(key_type key, Node** ancestor, int& count)
+{
+    uint64_t currentVersion, previousVersion;
+    Inner* current, * previous;
+    Leaf* leaf;
+    int i;
+
+RetryFindLeafAssumeSplit:
+    current = (Inner*)this->root;
+    if (!current->lock())
+        goto RetryFindLeafAssumeSplit;
+    if (current != this->root)
+    {
+        current->unlock();
+        goto RetryFindLeafAssumeSplit;
+    }
+    previous = current;
+    for (i = this->height; i > 1; i--)
+    {
+        anc_[i] = current;
+        current = (Inner*)(current->findChildSetPos(key, &pos_[i]));
+        if (!current->lock()) // lock current
+        {
+            previous->unlock();
+            goto RetryFindLeafAssumeSplit;
+        }
+        if (!current->isFull()) // new previous
+        {
+            previous->unlock();
+            previous = current;
+        }
+        else
+            current->unlock();
+
+        // if (!current->isFull())
+        // {
+        //     if (!current->lock())
+        //     {
+        //         previous->unlock();
+        //         goto RetryInsert;
+        //     }
+        //     previous->unlock();
+        //     previous = current;
+        // }
+        // else if (current->isLocked(currentVersion))
+        // {
+        //     previous->unlock();
+        //     goto RetryInsert;
+        // }
+    }
+    if (i == 1) // last layer inner
+    {
+        anc_[i] = current;
+        leaf = (Leaf*)(current->findChildSetPos(key, &pos_[i]));
+        if (!leaf->lock())
+        {
+            previous->unlock();
+            goto RetryFindLeafAssumeSplit;
+        }
+        if ((count = leaf->count()) < LEAF_KEY_NUM) // leaf not full
+        {
+            previous->unlock();
+            *ancestor = nullptr;
+        }
+        else
+            *ancestor = previous;
+    }
+    else // no inner
+    {
+        *ancestor = nullptr;
+        leaf = (Leaf*)current;
+        count = leaf->count();
+    }
+    return leaf;
+}
+
 bool tree::lookup(key_type key, val_type& val)
 {
-    uint64_t bits, currentVersion, previousVersion;
+    uint64_t currentVersion, previousVersion;
     Node* current, * previous;
     Leaf* leaf;
     int i;
-    bool ret;
 
 RetryLookup:
-    ret = false;
     current = this->root;
     if (current->isLocked(currentVersion))
         goto RetryLookup;
@@ -86,90 +202,52 @@ RetryLookup:
     leaf = (Leaf*)current;
     if (leaf->isLocked(currentVersion))
         goto RetryLookup;
-    bits = leaf->bitmap.bits;
-    for (i = 0; bits != 0; i++) 
-    {
-        if ((bits & 1) && key == leaf->ent[i].key) // key found
-        {
-            val = leaf->ent[i].val;
-            ret = true;
-            break;
-        }
-        bits = bits >> 1;
-    }
+    if ((i = leaf->findKey(key)) >= 0)
+        val = leaf->ent[i].val;
     if (!leaf->checkVersion(currentVersion))
         goto RetryLookup;
-    return ret;
+    return i >= 0;
 }
 
 bool tree::insert(key_type key, val_type val) 
 {
-    thread_local Inner* anc[MAX_HEIGHT];
-    thread_local short pos[MAX_HEIGHT];
-
-    uint64_t bits;
+    uint64_t bits, currentVersion;
+    Node* ancestor;
     Inner* current, * previous;
     Leaf* leaf;
     int i, r, count;
 
+    leaf = findLeaf(key, currentVersion, true); // only lock leaf
+
 RetryInsert: 
-    if (!this->root->lock())
-        goto RetryInsert;
-    current = (Inner*)this->root;
-    previous = current;
-    for (i = this->height; i > 1; i--)
+    if (leaf->count() < LEAF_KEY_NUM) // no split
     {
-        anc[i] = current;
-        current = (Inner*)(current->findChildSetPos(key, &pos[i]));
-        if (!current->isFull())
+        if (leaf->findKey(key) >= 0) // key already exists
         {
-            if (!current->lock())
-            {
-                previous->unlock();
-                goto RetryInsert;
-            }
-            previous->unlock();
-            previous = current;
+            leaf->unlock();
+            return false;
         }
-    }
-    if (i == 1)
-    {
-        anc[i] = current;
-        leaf = (Leaf*)(current->findChildSetPos(key, &pos[i]));
-        if (!leaf->lock())
-        {
-            previous->unlock();
-            goto RetryInsert;
-        }
-        if (!leaf->bitmap.is_full())
-            previous->unlock();
-    }
-    else
-        leaf = (Leaf*)current;
-
-    // Search leaf
-    bits = leaf->bitmap.bits;
-    count = 0;
-    for (i = 0; bits != 0; i++) 
-    {
-        if (bits & 1)
-        {
-            count ++;
-            if (key == leaf->ent[i].key) // key exists, return false
-                return false;
-        }
-        bits = bits >> 1;
-    }
-
-    // No split
-    if (count != LEAF_KEY_NUM)
-    {
+    InsertReturn:
         leaf->insertEntry(key, val);
         leaf->unlock();
         return true;
     }
-    else // split insert
+    else // need split, retraverse and lock both ancester and leaf
     {
+        leaf->unlock();
+        leaf = findLeafAssumeSplit(key, &ancestor, count);
+        if (leaf->findKey(key) >= 0) // key already exists
+        {
+            if (ancestor) ancestor->unlock();
+            leaf->unlock();
+            return false;
+        }
+        if (count < LEAF_KEY_NUM) // node was split by other thread
+        {
+            if (ancestor) ancestor->unlock();
+            goto InsertReturn;
+        }
+        // split insert
         // sort indexes of leaf entries, find middle split key
         int sorted_pos[LEAF_KEY_NUM];
         for (i = 0; i < LEAF_KEY_NUM; i++)
@@ -205,9 +283,9 @@ RetryInsert:
         int h = this->height;
         for (int level = 1; level <= h; level++)
         {
-            current = anc[level];
+            current = anc_[level];
             count = current->count();
-            short p = pos[level] + 1;
+            short p = pos_[level] + 1;
             if (count < INNER_KEY_NUM) // if last inner to update
             {
                 for (i = count; i >= p; i--)

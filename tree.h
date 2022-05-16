@@ -7,6 +7,9 @@
 
 /*------------------------------------------------------------------------*/
 
+thread_local Inner* anc_[MAX_HEIGHT];
+thread_local short pos_[MAX_HEIGHT];
+
 class Node;
 struct InnerEntry
 {
@@ -74,7 +77,9 @@ public:
     Leaf(const Leaf& leaf);
     ~Leaf();
 
+    int count() { return bitmap.count(); }
     void insertEntry(key_type key, val_type val);
+    int findKey(key_type key); // return position of key if found, -1 if not found
 } __attribute__((aligned(256)));
 
 static Inner* allocate_inner() { return new Inner; }
@@ -102,7 +107,7 @@ public:
         // delete (Leaf*)root; ToDo: 
     }
 
-    // return true and set val only if lookup successful, 
+    // return true and set val if lookup successful, 
     bool lookup(key_type key, val_type& val);
 
     // return true if insert successful
@@ -116,6 +121,10 @@ public:
 
     // return # of entries scanned
     size_t rangeScan(key_type start_key, size_t scan_size, void* result);
+
+private:
+    Leaf* findLeaf(key_type key, uint64_t& version, bool lock);
+    Leaf* findLeafAssumeSplit(key_type key, Node** ancestor, int& count);
 
 };
 

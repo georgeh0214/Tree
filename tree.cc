@@ -87,7 +87,7 @@ RetryFindLeaf:
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
-        if (previous && !previous->checkVersion(previousVersion))
+        if (previous && !previous->checkVersion(previousVersion)) // ???
             goto RetryFindLeaf;
         previous = (Inner*)current;
         previousVersion = currentVersion;
@@ -96,7 +96,7 @@ RetryFindLeaf:
             goto RetryFindLeaf;
     }
     leaf = (Leaf*)current;
-    if (previous && !previous->checkVersion(previousVersion))// ???
+    if (previous && !previous->checkVersion(previousVersion)) // ???
         goto RetryFindLeaf;
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
@@ -113,9 +113,9 @@ Leaf* tree::findLeafAssumeSplit(key_type key, Node** ancestor, int& count)
 
 RetryFindLeafAssumeSplit:
     current = (Inner*)this->root;
-    if (!current->lock())
+    if (!current->lock()) // ???
         goto RetryFindLeafAssumeSplit;
-    if (current != this->root)
+    if (current != this->root) // ???
     {
         current->unlock();
         goto RetryFindLeafAssumeSplit;
@@ -125,18 +125,37 @@ RetryFindLeafAssumeSplit:
     {
         anc_[i] = current;
         current = (Inner*)(current->findChildSetPos(key, &pos_[i]));
-        if (!current->lock()) // lock current
+
+        if (current->isLocked(currentVersion))
         {
             previous->unlock();
             goto RetryFindLeafAssumeSplit;
         }
-        if (!current->isFull()) // new previous
+        if (!current->isFull())
         {
+            if (!current->upgradeToWriter(currentVersion))
+            {
+                previous->unlock();
+                goto RetryFindLeafAssumeSplit;
+            }
             previous->unlock();
             previous = current;
+            // previousVersion = currentVersion;
         }
-        else
-            current->unlock();
+
+        // if (!current->lock()) // lock current
+        // {
+        //     previous->unlock();
+        //     goto RetryFindLeafAssumeSplit;
+        // }
+        // if (!current->isFull()) // new previous
+        // {
+        //     previous->unlock();
+        //     previous = current;
+        // }
+        // else
+        //     current->unlock();
+
 
         // if (!current->isFull())
         // {
@@ -158,7 +177,12 @@ RetryFindLeafAssumeSplit:
     {
         anc_[i] = current;
         leaf = (Leaf*)(current->findChildSetPos(key, &pos_[i]));
-        if (!leaf->lock())
+        if (previous != current && !current->checkVersion(currentVersion)) // ???
+        {
+            previous->unlock();
+            goto RetryFindLeafAssumeSplit;
+        }
+        if (!leaf->lock()) // ???
         {
             previous->unlock();
             goto RetryFindLeafAssumeSplit;
@@ -193,32 +217,6 @@ RetryLookup:
     if (!leaf->checkVersion(version))
         goto RetryLookup;
     return i >= 0;
-
-
-    // current = this->root;
-    // if (current->isLocked(currentVersion))
-    //     goto RetryLookup;
-
-    // for (i = this->height; i > 0; i--)
-    // {
-    //     if (current->isLocked(currentVersion))
-    //         goto RetryLookup;
-    //     previous = current;
-    //     previousVersion = currentVersion;
-    //     current = (((Inner*)current)->findChild(key));
-    //     if (!previous->checkVersion(previousVersion))
-    //         goto RetryLookup;
-    // }
-
-    // // Search leaf
-    // leaf = (Leaf*)current;
-    // if (leaf->isLocked(currentVersion))
-    //     goto RetryLookup;
-    // if ((i = leaf->findKey(key)) >= 0)
-    //     val = leaf->ent[i].val;
-    // if (!leaf->checkVersion(currentVersion))
-    //     goto RetryLookup;
-    // return i >= 0;
 }
 
 bool tree::insert(key_type key, val_type val) 
@@ -275,7 +273,7 @@ RetryInsert:
         leaf->next[1 - alt] = new_leaf; // track in unused ptr
 
         // set bitmap of both leaves
-        for (i = 0; i < split_pos; i++)
+        for (i = 0; i <= split_pos; i++)
             new_leaf->bitmap.reset(sorted_pos[i]);
         leaf->bitmap.setBits(new_leaf->bitmap.bits);
         leaf->bitmap.flip();

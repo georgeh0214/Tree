@@ -112,20 +112,20 @@ Leaf* tree::findLeafAssumeSplit(key_type key)
 
 RetryFindLeafAssumeSplit:
     current = this->root;
-    pos[0] = this->height;
-    if (current->isLocked(versions_[pos[0] + 1]) || current != this->root)
+    pos_[0] = this->height;
+    if (current->isLocked(versions_[pos_[0] + 1]) || current != this->root)
         goto RetryFindLeafAssumeSplit;
-    anc_[pos[0] + 1] = current;
-    for (i = pos[0]; i > 0; i--)
+    anc_[pos_[0] + 1] = (Inner*)current;
+    for (i = pos_[0]; i > 0; i--)
     {
         if (!anc_[i + 1]->checkVersion(versions_[i + 1])) // check parent version
             goto RetryFindLeafAssumeSplit;
         anc_[i] = (Inner*)current;
         if (!((Inner*)current)->isFull())
-            pos[0] = i;
+            pos_[0] = i;
         current = (((Inner*)current)->findChildSetPos(key, &pos_[i]));
         if (!anc_[i]->checkVersion(versions_[i]) || current->isLocked(versions_[i - 1]))
-            goto RetryFindLeaf;
+            goto RetryFindLeafAssumeSplit;
     }
     leaf = (Leaf*)current;
     if (leaf->findKey(key) >= 0) // key already exists
@@ -133,23 +133,23 @@ RetryFindLeafAssumeSplit:
         if (leaf->checkVersion(versions_[++i]))
             return nullptr;
         else
-            goto RetryFindLeaf;
+            goto RetryFindLeafAssumeSplit;
     }
     if (!leaf->upgradeToWriter(versions_[++i]))
-        goto RetryFindLeaf;
+        goto RetryFindLeafAssumeSplit;
     return leaf;
 }
 
-bool tree::lockStack(Node* n)
+bool tree::lockStack(Leaf* n)
 {
     int i, h = pos_[0];
     for (i = 1; i <= h; i++)
-        if (!anc_[i].upgradeToWriter(versions_[i]))
+        if (!anc_[i]->upgradeToWriter(versions_[i]))
             break;
     if (i <= h)
     {
         for (--i; i > 0; i--)
-            anc_[i].unlock();
+            anc_[i]->unlock();
         n->unlock();
         return false;
     }

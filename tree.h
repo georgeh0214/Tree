@@ -10,6 +10,7 @@
 class Inner;
 thread_local static Inner* anc_[MAX_HEIGHT];
 thread_local static short pos_[MAX_HEIGHT];
+thread_local static uint64_t versions_[MAX_HEIGHT];
 
 class Node;
 struct InnerEntry
@@ -44,6 +45,12 @@ public:
     }
     bool upgradeToWriter(uint64_t version) {
         return versionLock.compare_exchange_strong(version, version | 0b10);
+    }
+    bool upgradeToWriter(uint64_t version, Node* n) {
+        if (versionLock.compare_exchange_strong(version, version | 0b10))
+            return true;
+        n->unlock();
+        return false;
     }
     void unlock() { versionLock.fetch_add(0b10); }
 // leaf only
@@ -125,7 +132,8 @@ public:
 
 private:
     Leaf* findLeaf(key_type key, uint64_t& version, bool lock);
-    Leaf* findLeafAssumeSplit(key_type key, Node** ancestor, int& count);
+    Leaf* findLeafAssumeSplit(key_type key);
+    bool lockStack(Leaf* n);
 
 };
 

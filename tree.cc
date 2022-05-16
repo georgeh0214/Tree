@@ -104,104 +104,56 @@ RetryFindLeaf:
     return leaf;
 }
 
-Leaf* tree::findLeafAssumeSplit(key_type key, Node** ancestor, int& count)
+Leaf* tree::findLeafAssumeSplit(key_type key)
 {
-    uint64_t currentVersion, previousVersion;
-    Inner* current, * previous;
+    Node* current;
     Leaf* leaf;
     int i;
 
 RetryFindLeafAssumeSplit:
-    current = (Inner*)this->root;
-    if (!current->lock()) // ???
+    current = this->root;
+    pos[0] = this->height;
+    if (current->isLocked(versions_[pos[0] + 1]) || current != this->root)
         goto RetryFindLeafAssumeSplit;
-    if (current != this->root) // ???
+    anc_[pos[0] + 1] = current;
+    for (i = pos[0]; i > 0; i--)
     {
-        current->unlock();
-        goto RetryFindLeafAssumeSplit;
+        if (!anc_[i + 1]->checkVersion(versions_[i + 1])) // check parent version
+            goto RetryFindLeafAssumeSplit;
+        anc_[i] = (Inner*)current;
+        if (!((Inner*)current)->isFull())
+            pos[0] = i;
+        current = (((Inner*)current)->findChildSetPos(key, &pos_[i]));
+        if (!anc_[i]->checkVersion(versions_[i]) || current->isLocked(versions_[i - 1]))
+            goto RetryFindLeaf;
     }
-    previous = current;
-    for (i = this->height; i > 1; i--)
+    leaf = (Leaf*)current;
+    if (leaf->findKey(key) >= 0) // key already exists
     {
-        anc_[i] = current;
-        current = (Inner*)(current->findChildSetPos(key, &pos_[i]));
-
-        if (current->isLocked(currentVersion))
-        {
-            previous->unlock();
-            goto RetryFindLeafAssumeSplit;
-        }
-        if (!current->isFull())
-        {
-            if (!current->upgradeToWriter(currentVersion))
-            {
-                previous->unlock();
-                goto RetryFindLeafAssumeSplit;
-            }
-            previous->unlock();
-            previous = current;
-            // previousVersion = currentVersion;
-        }
-
-        // if (!current->lock()) // lock current
-        // {
-        //     previous->unlock();
-        //     goto RetryFindLeafAssumeSplit;
-        // }
-        // if (!current->isFull()) // new previous
-        // {
-        //     previous->unlock();
-        //     previous = current;
-        // }
-        // else
-        //     current->unlock();
-
-
-        // if (!current->isFull())
-        // {
-        //     if (!current->lock())
-        //     {
-        //         previous->unlock();
-        //         goto RetryInsert;
-        //     }
-        //     previous->unlock();
-        //     previous = current;
-        // }
-        // else if (current->isLocked(currentVersion))
-        // {
-        //     previous->unlock();
-        //     goto RetryInsert;
-        // }
-    }
-    if (i == 1) // last layer inner
-    {
-        anc_[i] = current;
-        leaf = (Leaf*)(current->findChildSetPos(key, &pos_[i]));
-        if (previous != current && !current->checkVersion(currentVersion)) // ???
-        {
-            previous->unlock();
-            goto RetryFindLeafAssumeSplit;
-        }
-        if (!leaf->lock()) // ???
-        {
-            previous->unlock();
-            goto RetryFindLeafAssumeSplit;
-        }
-        if ((count = leaf->count()) < LEAF_KEY_NUM) // leaf not full
-        {
-            previous->unlock();
-            *ancestor = nullptr;
-        }
+        if (leaf->checkVersion(versions_[++i]))
+            return nullptr;
         else
-            *ancestor = previous;
+            goto RetryFindLeaf;
     }
-    else // no inner
-    {
-        *ancestor = nullptr;
-        leaf = (Leaf*)current;
-        count = leaf->count();
-    }
+    if (!leaf->upgradeToWriter(versions_[++i]))
+        goto RetryFindLeaf;
     return leaf;
+}
+
+bool tree::lockStack(Node* n)
+{
+    int i, h = pos_[0];
+    for (i = 1; i <= h; i++)
+        if (!anc_[i].upgradeToWriter(versions_[i]))
+            break;
+    if (i <= h)
+    {
+        for (--i; i > 0; i--)
+            anc_[i].unlock();
+        n->unlock();
+        return false;
+    }
+    return true;
 }
 
 bool tree::lookup(key_type key, val_type& val)
@@ -227,36 +179,19 @@ bool tree::insert(key_type key, val_type val)
     Leaf* leaf;
     int i, r, count;
 
-    leaf = findLeaf(key, currentVersion, true); // only lock leaf
-
 RetryInsert: 
+    leaf = findLeafAssumeSplit(key);
+    if (!leaf) return false;
     if (leaf->count() < LEAF_KEY_NUM) // no split
     {
-        if (leaf->findKey(key) >= 0) // key already exists
-        {
-            leaf->unlock();
-            return false;
-        }
-    InsertReturn:
         leaf->insertEntry(key, val);
         leaf->unlock();
         return true;
     }
-    else // need split, retraverse and lock both ancester and leaf
+    else // need split
     {
-        leaf->unlock();
-        leaf = findLeafAssumeSplit(key, &ancestor, count);
-        if (leaf->findKey(key) >= 0) // key already exists
-        {
-            if (ancestor) ancestor->unlock();
-            leaf->unlock();
-            return false;
-        }
-        if (count < LEAF_KEY_NUM) // node was split by other thread
-        {
-            if (ancestor) ancestor->unlock();
-            goto InsertReturn;
-        }
+        if (!lockStack(leaf))
+            goto RetryInsert;
         // split insert
         // sort indexes of leaf entries, find middle split key
         int sorted_pos[LEAF_KEY_NUM];
@@ -284,13 +219,13 @@ RetryInsert:
         else
             new_leaf->insertEntry(key, val);
         new_leaf->unlock();
-        if (this->height > 0)
+        if (pos_[0])
             leaf->unlockFlipAlt(alt);
 
         // Update inners
         Node* new_child = new_leaf;
         Inner* new_inner;
-        int h = this->height;
+        int h = pos_[0];
         for (int level = 1; level <= h; level++)
         {
             current = anc_[level];
@@ -331,6 +266,8 @@ RetryInsert:
             new_child = new_inner;
             current->count() = LEFT_KEY_NUM;
             new_inner->count() = RIGHT_KEY_NUM;
+            if (level != h) // do not unlock root
+                current->unlock();
         }
 
         // new root
@@ -343,12 +280,13 @@ RetryInsert:
 
         Node* old_root = this->root;
         this->root = new_inner;
-        this->height ++;
+        if (++(this->height) > MAX_HEIGHT)
+            printf("Stack overflow!\n");
+        new_inner->unlock();
         if (this->height > 1) // previous root is a nonleaf
             ((Inner*)old_root)->unlock();
         else // previous root is a leaf
             ((Leaf*)old_root)->unlockFlipAlt(alt);
-        new_inner->unlock();
         return true;
     }
 }

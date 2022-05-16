@@ -1,8 +1,8 @@
 // #define PM
 // #define Binary_Search
 
-#define INNER_KEY_NUM 14
-#define LEAF_KEY_NUM 14 // <= 64 for now, recommand 14/30/46/62
+#define INNER_KEY_NUM 64
+#define LEAF_KEY_NUM 64 // <= 64 for now, recommand 14/30/46/62
 #define MAX_HEIGHT 32 // should be enough
 #define EARLY_SPLIT 2
 

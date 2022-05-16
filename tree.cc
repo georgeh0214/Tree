@@ -81,11 +81,14 @@ Leaf* tree::findLeaf(key_type key, uint64_t& version, bool lock)
     int i;
 
 RetryFindLeaf: 
+    previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
+        if (previous && !previous->checkVersion(previousVersion))
+            goto RetryFindLeaf;
         previous = (Inner*)current;
         previousVersion = currentVersion;
         current = ((Inner*)current)->findChild(key);
@@ -93,6 +96,8 @@ RetryFindLeaf:
             goto RetryFindLeaf;
     }
     leaf = (Leaf*)current;
+    if (previous && !previous->checkVersion(previousVersion))// ???
+        goto RetryFindLeaf;
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
     version = currentVersion;

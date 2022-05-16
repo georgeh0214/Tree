@@ -177,43 +177,50 @@ RetryFindLeafAssumeSplit:
 
 bool tree::lookup(key_type key, val_type& val)
 {
-    uint64_t currentVersion, previousVersion;
-    Node* current, * previous;
+    uint64_t version;
     Leaf* leaf;
     int i;
 
 RetryLookup:
-    current = this->root;
-    if (current->isLocked(currentVersion))
-        goto RetryLookup;
-
-    for (i = this->height; i > 0; i--)
-    {
-        if (current->isLocked(currentVersion))
-            goto RetryLookup;
-        previous = current;
-        previousVersion = currentVersion;
-        current = (((Inner*)current)->findChild(key));
-        if (!previous->checkVersion(previousVersion))
-            goto RetryLookup;
-    }
-
-    // Search leaf
-    leaf = (Leaf*)current;
-    if (leaf->isLocked(currentVersion))
-        goto RetryLookup;
+    leaf = findLeaf(key, version, false);
     if ((i = leaf->findKey(key)) >= 0)
         val = leaf->ent[i].val;
-    if (!leaf->checkVersion(currentVersion))
+    if (!leaf->checkVersion(version))
         goto RetryLookup;
     return i >= 0;
+
+
+    // current = this->root;
+    // if (current->isLocked(currentVersion))
+    //     goto RetryLookup;
+
+    // for (i = this->height; i > 0; i--)
+    // {
+    //     if (current->isLocked(currentVersion))
+    //         goto RetryLookup;
+    //     previous = current;
+    //     previousVersion = currentVersion;
+    //     current = (((Inner*)current)->findChild(key));
+    //     if (!previous->checkVersion(previousVersion))
+    //         goto RetryLookup;
+    // }
+
+    // // Search leaf
+    // leaf = (Leaf*)current;
+    // if (leaf->isLocked(currentVersion))
+    //     goto RetryLookup;
+    // if ((i = leaf->findKey(key)) >= 0)
+    //     val = leaf->ent[i].val;
+    // if (!leaf->checkVersion(currentVersion))
+    //     goto RetryLookup;
+    // return i >= 0;
 }
 
 bool tree::insert(key_type key, val_type val) 
 {
-    uint64_t bits, currentVersion;
+    uint64_t currentVersion;
     Node* ancestor;
-    Inner* current, * previous;
+    Inner* current;
     Leaf* leaf;
     int i, r, count;
 

@@ -7,8 +7,9 @@
 
 /*------------------------------------------------------------------------*/
 
-thread_local Inner* anc_[MAX_HEIGHT];
-thread_local short pos_[MAX_HEIGHT];
+class Inner;
+thread_local static Inner* anc_[MAX_HEIGHT];
+thread_local static short pos_[MAX_HEIGHT];
 
 class Node;
 struct InnerEntry

@@ -56,6 +56,9 @@ void Leaf::insertEntry(key_type key, val_type val)
     int i = this->bitmap.first_zero();
     this->ent[i].key = key;
     this->ent[i].val = val;
+#ifdef FINGERPRINT
+    this->fp[i] = key_hash_;
+#endif
     this->bitmap.set(i);
 }
 
@@ -64,7 +67,11 @@ int Leaf::findKey(key_type key)
     uint64_t bits = this->bitmap.bits;
     for (int i = 0; bits != 0; i++) 
     {
+    #ifdef FINGERPRINT
+        if ((bits & 1) && key_hash_ == this->fp[i] && key == this->ent[i].key) // key found
+    #else
         if ((bits & 1) && key == this->ent[i].key) // key found
+    #endif
             return i;
         bits = bits >> 1;
     }
@@ -169,6 +176,9 @@ bool tree::lookup(key_type key, val_type& val)
     uint64_t version;
     Leaf* leaf;
     int i;
+#ifdef FINGERPRINT
+    key_hash_ = getOneByteHash(key);
+#endif
 
 RetryLookup:
     leaf = findLeaf(key, version, false);
@@ -179,11 +189,31 @@ RetryLookup:
     return i >= 0;
 }
 
+bool tree::update(key_type key, val_type new_val)
+{
+    uint64_t version;
+    Leaf* leaf;
+    int i;
+#ifdef FINGERPRINT
+    key_hash_ = getOneByteHash(key);
+#endif
+
+RetryUpdate:
+    leaf = findLeaf(key, version, true);
+    if ((i = leaf->findKey(key)) >= 0)
+        leaf->ent[i].val = new_val;
+    leaf->unlock();
+    return i >= 0;
+}
+
 bool tree::insert(key_type key, val_type val) 
 {
     Inner* current;
     Leaf* leaf;
     int i, r, count;
+#ifdef FINGERPRINT
+    key_hash_ = getOneByteHash(key);
+#endif
 
 RetryInsert: 
     leaf = findLeafAssumeSplit(key);

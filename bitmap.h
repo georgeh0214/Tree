@@ -4,7 +4,10 @@
 #define INNER_KEY_NUM 64
 #define LEAF_KEY_NUM 64 // <= 64 for now, recommand 14/30/46/62
 #define MAX_HEIGHT 32 // should be enough
+
+#define FINGERPRINT
 #define EARLY_SPLIT 2
+
 
 typedef uint64_t key_type; // >= 8 bytes
 typedef void* val_type;

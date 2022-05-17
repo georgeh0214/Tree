@@ -11,6 +11,7 @@ class Inner;
 thread_local static Inner* anc_[MAX_HEIGHT];
 thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
+thread_local static uint8_t key_hash_;
 
 class Node;
 struct InnerEntry
@@ -78,6 +79,9 @@ class Leaf : public Node
 {
 public:
     Bitmap bitmap; // 8 byte
+#ifdef FINGERPRINT
+    uint8_t fp[LEAF_KEY_NUM];
+#endif
     LeafEntry ent[LEAF_KEY_NUM];
     Leaf* next[2]; // 16 byte
 
@@ -105,6 +109,9 @@ public:
     {
         printf("Inner size:%d \n", sizeof(Inner));
         printf("Leaf size:%d \n", sizeof(Leaf));
+    #ifdef FINGERPRINT
+        printf("Fingerprint enabled.\n");
+    #endif
         height = 0;
         root = new (allocate_leaf()) Leaf();
         first_leaf = (Leaf*)root;
@@ -143,4 +150,10 @@ static inline unsigned long long rdtsc(void)
    __asm__ __volatile__("rdtsc"
                         : "=a"(lo), "=d"(hi));
    return ((unsigned long long)lo) | (((unsigned long long)hi) << 32);
+}
+
+inline static uint8_t getOneByteHash(key_type key)
+{
+    uint8_t oneByteHashKey = std::_Hash_bytes(&key, sizeof(key), 1) & 0xff;
+    return oneByteHashKey;
 }

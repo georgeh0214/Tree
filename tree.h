@@ -152,8 +152,3 @@ static inline unsigned long long rdtsc(void)
    return ((unsigned long long)lo) | (((unsigned long long)hi) << 32);
 }
 
-inline static uint8_t getOneByteHash(key_type key)
-{
-    uint8_t oneByteHashKey = std::_Hash_bytes(&key, sizeof(key), 1) & 0xff;
-    return oneByteHashKey;
-}

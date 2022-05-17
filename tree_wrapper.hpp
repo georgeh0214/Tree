@@ -67,15 +67,8 @@ bool tree_wrapper::remove(const char *key, size_t key_sz)
 
 int tree_wrapper::scan(const char *key, size_t key_sz, int scan_sz, char *&values_out)
 {
-//   constexpr size_t ONE_MB = 1ULL << 20;
-//   static thread_local char results[ONE_MB];
-//   // //FIXME
-//   values_out = results;
-//   int scanned = lbt->rangeScan(PBkeyToLB(key), scan_sz, results); // range_scan_by_size
-// #ifdef DEBUG_MSG
-//   if (scanned != 100)
-//     printf("%d records scanned\n", scanned);
-// #endif
-//   return scanned;
-  return 0;
+  constexpr size_t ONE_MB = 1ULL << 20;
+  static thread_local char results[ONE_MB];
+  ScanHelper sh(scan_sz, results);
+  return t_.rangeScan(*reinterpret_cast<key_type*>(const_cast<char*>(key)), sh);
 }

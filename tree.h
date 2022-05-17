@@ -135,7 +135,7 @@ public:
     bool update(key_type key, val_type new_val);
 
     // return # of entries scanned
-    size_t rangeScan(key_type start_key, size_t scan_size, void* result);
+    size_t rangeScan(key_type start_key, ScanHelper& sh);
 
 private:
     Leaf* findLeaf(key_type key, uint64_t& version, bool lock);

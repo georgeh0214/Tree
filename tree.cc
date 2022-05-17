@@ -326,3 +326,8 @@ RetryInsert:
         return true;
     }
 }
+
+size_t tree::rangeScan(key_type start_key, ScanHelper& sh)
+{
+    
+}

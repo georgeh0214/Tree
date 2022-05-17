@@ -107,7 +107,7 @@ RetryFindLeaf:
 Leaf* tree::findLeafAssumeSplit(key_type key)
 {
     uint64_t currentVersion, previousVersion;
-    Node* current, previous;
+    Node* current, * previous;
     Leaf* leaf;
     int i;
 
@@ -117,8 +117,8 @@ RetryFindLeafAssumeSplit:
     if (current->isLocked(currentVersion) || current != this->root)
         goto RetryFindLeafAssumeSplit;
     pos_[0] = this->height;
-    // anc_[pos_[0] + 1] = (Inner*)current;
-    // versions_[]
+    if (current != this->root)
+        goto RetryFindLeafAssumeSplit;
     for (i = pos_[0]; i > 0; i--)
     {
         if (previous && !previous->checkVersion(previousVersion)) // check parent version
@@ -134,6 +134,8 @@ RetryFindLeafAssumeSplit:
             goto RetryFindLeafAssumeSplit;
     }
     leaf = (Leaf*)current;
+    if (previous && !previous->checkVersion(previousVersion)) // ???
+        goto RetryFindLeafAssumeSplit;
     if (leaf->findKey(key) >= 0) // key already exists // ??? is locking then search needed?
     {
         if (leaf->checkVersion(currentVersion))

@@ -26,6 +26,33 @@ struct LeafEntry
     val_type val;
 };
 
+class ScanHelper // implement 
+{
+public:
+    LeafEntry* start;
+    LeafEntry* cur;
+    int scan_size;
+    int scanned;
+
+    ScanHelper(int c, char* r) // initializer
+    {
+        scanned = 0;
+        scan_size = c; 
+        start = cur = (LeafEntry*)r; 
+    }
+
+    void reset() { scanned = 0; cur = start; } // called upon retry
+
+    bool stop() { return scanned >= scan_size; } // this is called once after scanning each leaf
+
+    inline void scanEntry(const LeafEntry& ent) // tell us what to do with each entry scanned
+    {
+        *cur = ent;
+        cur ++;
+        scanned ++;
+    }
+}
+
 inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
 {
     return a.key < b.key; 
@@ -85,11 +112,12 @@ public:
     LeafEntry ent[LEAF_KEY_NUM];
     Leaf* next[2]; // 16 byte
 
-    Leaf() {}
+    Leaf() { next[0] = next[1] = nullptr; }
     Leaf(const Leaf& leaf);
     ~Leaf();
 
     int count() { return bitmap.count(); }
+    Leaf* next() { return next[alt()]; }
     void insertEntry(key_type key, val_type val);
     int findKey(key_type key); // return position of key if found, -1 if not found
 } __attribute__((aligned(256)));
@@ -134,8 +162,8 @@ public:
     // return true if entry with target key is found and val is set to new_val
     bool update(key_type key, val_type new_val);
 
-    // return # of entries scanned
-    size_t rangeScan(key_type start_key, ScanHelper& sh);
+    // range scan with customized scan helper class
+    void rangeScan(key_type start_key, ScanHelper& sh);
 
 private:
     Leaf* findLeaf(key_type key, uint64_t& version, bool lock);

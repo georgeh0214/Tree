@@ -18,25 +18,6 @@ inline static uint8_t getOneByteHash(key_type key)
     return oneByteHashKey;
 }
 
-class ScanHelper
-{
-public:
-    LeafEntry* results;
-    int scan_size;
-
-    ScanHelper(int c, char* r) { scan_size = c; results = r; }
-
-    bool stop() { return scan_size <= 0;} // rangeScan unit is leaf so overscan is possible
-
-    inline void scanEntry(LeafEntry& ent) // tell us what to do with each entry scanned
-    {
-        *result = ent;
-        results ++;
-        scan_size --;
-    }
-}
-
-
 /*------------------------------------------------------------------------*/
 
 static const uint64_t OFFSET = (uint64_t)(-1) >> (64 - LEAF_KEY_NUM);

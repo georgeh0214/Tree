@@ -327,7 +327,29 @@ RetryInsert:
     }
 }
 
-size_t tree::rangeScan(key_type start_key, ScanHelper& sh)
+void tree::rangeScan(key_type start_key, ScanHelper& sh)
 {
-    
+    Leaf* leaf, next_leaf;
+    uint64_t leaf_version, next_version, bits;
+    int i;
+    // std::vector<Leaf*> leaves; // ToDo: is phantom allowed?
+
+RetryScan:
+    sh.reset();
+    scanned = 0;
+    leaf = findLeaf(start_key, leaf_version, false);
+
+    do {
+        bits = leaf->bitmap.bits;
+        for (int i = 0; bits != 0; i++) 
+            if (bits & 1) // entry found
+                sh.scanEntry(leaf->ent[i]);
+        next_leaf = leaf->next();
+        if (!next_leaf && !leaf->checkVersion(leaf_version))
+            break;
+        if (next_leaf.isLocked(next_version) || !leaf->checkVersion(leaf_version))
+            goto RetryScan;
+        leaf = next_leaf;
+        leaf_version = next_version;
+    } 
 }

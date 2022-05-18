@@ -7,7 +7,7 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
     int l = 1, r = this->count(), mid;
     while (l <= r) {
         mid = (l + r) >> 1;
-        if (key <= this->ent[middle].key)
+        if (key <= this->ent[mid].key)
             r = mid - 1;
         else
             l = mid + 1;
@@ -30,7 +30,7 @@ Node* Inner::findChild(key_type key)
     int l = 1, r = this->count(), mid;
     while (l <= r) {
         mid = (l + r) >> 1;
-        if (key <= this->ent[middle].key)
+        if (key <= this->ent[mid].key)
             r = mid - 1;
         else
             l = mid + 1;
@@ -338,7 +338,7 @@ RetryScan:
     sh.reset();
     leaf = findLeaf(start_key, leaf_version, false);
     bits = leaf->bitmap.bits;
-    for (int i = 0; bits != 0; i++)
+    for (int i = 0; bits != 0; i++, bits = bits >> 1)
         if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
             sh.scanEntry(leaf->ent[i]);
     next_leaf = leaf->sibling();
@@ -354,11 +354,11 @@ RetryScan:
     leaf_version = next_version;
     do {
         bits = leaf->bitmap.bits;
-        for (int i = 0; bits != 0; i++) 
+        for (int i = 0; bits != 0; i++, bits = bits >> 1) 
             if (bits & 1) // entry found
                 sh.scanEntry(leaf->ent[i]);
         next_leaf = leaf->sibling();
-        if (!next_leaf)
+	if (!next_leaf)
         { 
             if (!leaf->checkVersion(leaf_version))
                 goto RetryScan;

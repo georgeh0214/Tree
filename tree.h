@@ -120,7 +120,7 @@ public:
     Leaf* sibling() { return next[alt()]; }
     void insertEntry(key_type key, val_type val);
     int findKey(key_type key); // return position of key if found, -1 if not found
-} __attribute__((aligned(256)));
+} __attribute__((aligned(64)));
 
 static Inner* allocate_inner() { return new Inner; }
 

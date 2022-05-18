@@ -329,27 +329,44 @@ RetryInsert:
 
 void tree::rangeScan(key_type start_key, ScanHelper& sh)
 {
-    Leaf* leaf, next_leaf;
+    Leaf* leaf, * next_leaf;
     uint64_t leaf_version, next_version, bits;
     int i;
     // std::vector<Leaf*> leaves; // ToDo: is phantom allowed?
 
 RetryScan:
     sh.reset();
-    scanned = 0;
     leaf = findLeaf(start_key, leaf_version, false);
-
+    bits = leaf->bitmap.bits;
+    for (int i = 0; bits != 0; i++)
+        if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
+            sh.scanEntry(leaf->ent[i]);
+    next_leaf = leaf->sibling();
+    if (!next_leaf)
+    {
+	if (!leaf->checkVersion(leaf_version))
+	    goto RetryScan;
+	return;
+    }
+    if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+        goto RetryScan;
+    leaf = next_leaf;
+    leaf_version = next_version;
     do {
         bits = leaf->bitmap.bits;
         for (int i = 0; bits != 0; i++) 
             if (bits & 1) // entry found
                 sh.scanEntry(leaf->ent[i]);
-        next_leaf = leaf->next();
-        if (!next_leaf && !leaf->checkVersion(leaf_version))
-            break;
-        if (next_leaf.isLocked(next_version) || !leaf->checkVersion(leaf_version))
+        next_leaf = leaf->sibling();
+        if (!next_leaf)
+        { 
+            if (!leaf->checkVersion(leaf_version))
+                goto RetryScan;
+            return;
+        }
+        if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
             goto RetryScan;
         leaf = next_leaf;
         leaf_version = next_version;
-    } 
+    } while (!sh.stop());
 }

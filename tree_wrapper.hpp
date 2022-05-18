@@ -71,6 +71,6 @@ int tree_wrapper::scan(const char *key, size_t key_sz, int scan_sz, char *&value
   static thread_local char results[ONE_MB];
   ScanHelper sh(scan_sz, results);
   t_.rangeScan(*reinterpret_cast<key_type*>(const_cast<char*>(key)), sh);
-  std::sort((LeafEntry*)results, ((LeafEntry*)results) + scanned, leafEntryCompareFunc);
+  std::sort((LeafEntry*)results, ((LeafEntry*)results) + sh.scanned, leafEntryCompareFunc);
   return sh.scanned;
 }

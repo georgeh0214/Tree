@@ -45,7 +45,7 @@ public:
 
     bool stop() { return scanned >= scan_size; } // this is called once after scanning each leaf
 
-    inline void scanEntry(const LeafEntry& ent) // tell us what to do with each entry scanned
+    inline void scanEntry(const LeafEntry& ent) // what to do with each entry scanned
     {
         *cur = ent;
         cur ++;

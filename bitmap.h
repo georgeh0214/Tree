@@ -1,24 +1,67 @@
-// #define PM
-// #define Binary_Search
+#include <cstring>
 
 #define INNER_KEY_NUM 38
-#define LEAF_KEY_NUM 64 // <= 64 for now, recommand 14/30/46/62
+#define LEAF_KEY_NUM 64 // <= 64 due to bitmap
 #define MAX_HEIGHT 32 // should be enough
 
+// #define PM
 #define FINGERPRINT
 #define EARLY_SPLIT 2
+// #define Binary_Search // slower than linear search
+#define STRING_KEY 
 
+#ifdef STRING_KEY // change length type if necessary
+    // #define MAX_LENGTH 65535 // if defined will use mkey for comparison
+    class StringKey {
+    public:
+        char* key;
+        #ifdef MAX_LENGTH
+            uint64_t mkey : 48;
+            uint64_t length : 16;
+        #else
+            uint16_t length;
+        #endif
 
-typedef uint64_t key_type; // >= 8 bytes
+        inline int compare(const StringKey &other) 
+        {
+            int res;
+            if (length < other.length)
+            {
+                res = std::memcmp(key, other.key, length);
+                return res? res : -1;
+            }
+            else
+            {
+                res = std::memcmp(key, other.key, other.length);
+                return  res? res : length == other.length? 0 : 1;
+            }
+        }
+
+        inline bool operator<(const StringKey &other) { return compare(other) < 0; }
+        inline bool operator>(const StringKey &other) { return compare(other) > 0; }
+        inline bool operator==(const StringKey &other) { return compare(other) == 0; }
+        inline bool operator!=(const StringKey &other) { return compare(other) != 0; }
+        inline bool operator<=(const StringKey &other) { return compare(other) <= 0; }
+        inline bool operator>=(const StringKey &other) { return compare(other) >= 0; }
+    };
+
+    typedef StringKey key_type;
+#else
+    typedef uint64_t key_type; // key type shoud be >= 8 bytes, count is stored in first key of inner
+#endif
 typedef void* val_type;
 
-inline static uint8_t getOneByteHash(key_type key)
+inline static uint8_t getOneByteHash(key_type k)
 {
-    uint8_t oneByteHashKey = std::_Hash_bytes(&key, sizeof(key_type), 1) & 0xff;
+#ifdef STRING_KEY
+    uint8_t oneByteHashKey = std::_Hash_bytes(k.key, k.length, 1) & 0xff;
+#else
+    uint8_t oneByteHashKey = std::_Hash_bytes(&k, sizeof(key_type), 1) & 0xff;
+#endif
     return oneByteHashKey;
 }
 
-/*------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------------------*/
 
 static const uint64_t OFFSET = (uint64_t)(-1) >> (64 - LEAF_KEY_NUM);
 static const int MID = LEAF_KEY_NUM / 2;
@@ -27,7 +70,6 @@ class Bitmap
 {
  public:
     uint64_t bits;
-
 
     Bitmap()
     {

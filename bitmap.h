@@ -12,8 +12,7 @@
 
 #ifdef STRING_KEY // change length type if necessary
     #define MAX_LENGTH 8
-    class StringKey {
-    public:
+    struct StringKey {
         char* key;
         #ifdef MAX_LENGTH
             uint64_t mkey : 48;
@@ -23,13 +22,13 @@
         #endif
 	
     	StringKey() 
-	{ 
-	    key = nullptr; 
-	    length = 0; 
-	#ifdef MAX_LENGTH
-	    mkey = 0;
-	#endif
-	}
+    	{ 
+    	    key = nullptr; 
+    	    length = 0; 
+    	#ifdef MAX_LENGTH
+    	    mkey = 0;
+    	#endif
+    	}
 
     	StringKey(char* k, uint16_t len) 
         {
@@ -38,7 +37,7 @@
             mkey = 0;
             int bytes = MAX_LENGTH - len;
             if (bytes < 6)
-	           mkey = *((uint64_t*)k) >> ((2 + bytes) * 8);
+	           mkey = __bswap_64(*((uint64_t*)k)) >> ((2 + bytes) * 8); // little endian
         #endif
         }
 

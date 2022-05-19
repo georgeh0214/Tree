@@ -18,7 +18,7 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
     #else
         uint64_t i;
         for (i = 1; i <= this->count(); i++)
-            if (key.mkey <= this->ent[i].key.mkey)
+            if (key.mkey <= this->ent[i].key.mkey && key <= this->ent[i].key)
                 break;
         *pos = --i;
         return this->ent[i].child;
@@ -62,7 +62,7 @@ Node* Inner::findChild(key_type key)
     #else
         uint64_t i;
         for (i = 1; i <= this->count(); i++)
-            if (key.mkey <= this->ent[i].key.mkey)
+            if (key.mkey <= this->ent[i].key.mkey && key <= this->ent[i].key)
                 break;
         return this->ent[--i].child;
     #endif

@@ -8,7 +8,7 @@
 #define FINGERPRINT
 #define EARLY_SPLIT 2
 // #define Binary_Search // slower than linear search
-#define STRING_KEY 
+// #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
     // #define MAX_LENGTH 65535 // if defined will use mkey for comparison
@@ -21,6 +21,10 @@
         #else
             uint16_t length;
         #endif
+	
+	StringKey() { key = nullptr; length = 0; }
+
+	StringKey(char* k, uint16_t len) { key = k; length = len; }
 
         inline int compare(const StringKey &other) 
         {

@@ -94,17 +94,13 @@ RetryFindLeaf:
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
-        if (previous && !previous->checkVersion(previousVersion)) // ???
-            goto RetryFindLeaf;
         previous = (Inner*)current;
         previousVersion = currentVersion;
         current = ((Inner*)current)->findChild(key);
-        if (!previous->checkVersion(previousVersion) || current->isLocked(currentVersion))
+        if (current->isLocked(currentVersion) || !previous->checkVersion(previousVersion))
             goto RetryFindLeaf;
     }
     leaf = (Leaf*)current;
-    if (previous && !previous->checkVersion(previousVersion)) // ???
-        goto RetryFindLeaf;
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
     version = currentVersion;
@@ -124,12 +120,8 @@ RetryFindLeafAssumeSplit:
     if (current->isLocked(currentVersion) || current != this->root)
         goto RetryFindLeafAssumeSplit;
     pos_[0] = this->height;
-    if (current != this->root)
-        goto RetryFindLeafAssumeSplit;
     for (i = pos_[0]; i > 0; i--)
     {
-        if (previous && !previous->checkVersion(previousVersion)) // check parent version
-            goto RetryFindLeafAssumeSplit;
         anc_[i] = (Inner*)current;
         versions_[i] = currentVersion;
         previous = current;
@@ -137,13 +129,11 @@ RetryFindLeafAssumeSplit:
         if (!((Inner*)current)->isFull())
             pos_[0] = i;
         current = (((Inner*)current)->findChildSetPos(key, &pos_[i]));
-        if (!previous->checkVersion(previousVersion) || current->isLocked(currentVersion))
+        if (current->isLocked(currentVersion) || !previous->checkVersion(previousVersion))
             goto RetryFindLeafAssumeSplit;
     }
     leaf = (Leaf*)current;
-    if (previous && !previous->checkVersion(previousVersion)) // ???
-        goto RetryFindLeafAssumeSplit;
-    if (leaf->findKey(key) >= 0) // key already exists // ??? is locking then search needed?
+    if (leaf->findKey(key) >= 0) // key already exists
     {
         if (leaf->checkVersion(currentVersion))
             return nullptr;

@@ -5,6 +5,7 @@
 #include <sys/types.h>
 
 // #define DEBUG_MSG
+#define ALLOC_KEY
 
 class tree_wrapper : public tree_api
 {
@@ -24,6 +25,9 @@ private:
 
 tree_wrapper::tree_wrapper()
 {
+#ifdef STRING_KEY
+  printf("String Key Enabled. \n");
+#endif
 }
 
 tree_wrapper::~tree_wrapper()
@@ -47,7 +51,13 @@ bool tree_wrapper::find(const char *key, size_t key_sz, char *value_out)
 bool tree_wrapper::insert(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
 #ifdef STRING_KEY
-  key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
+  #ifdef ALLOC_KEY // when using pibench's generated keys
+    char* key_ = new char[key_sz];
+    memcpy(key_, key, key_sz);
+    key_type k(key_, key_sz);
+  #else
+    key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
+  #endif
   return t_.insert(k, reinterpret_cast<val_type>(const_cast<char*>(value)));
 #else
   return t_.insert(*reinterpret_cast<key_type*>(const_cast<char*>(key)), 

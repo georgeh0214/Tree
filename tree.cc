@@ -62,7 +62,7 @@ Node* Inner::findChild(key_type key)
     #else
         uint64_t i;
         for (i = 1; i <= this->count(); i++)
-            if (key.meky <= this->ent[i].key.mkey)
+            if (key.mkey <= this->ent[i].key.mkey)
                 break;
         return this->ent[--i].child;
     #endif

@@ -8,13 +8,10 @@
 #define FINGERPRINT
 #define EARLY_SPLIT 2
 // #define Binary_Search // slower than linear search
-// #define STRING_KEY 
+#define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
     #define MAX_LENGTH 8
-    #ifdef MAX_LENGTH
-        int MIN_LEN =  MAX_LENGTH - 6; // mkey is 48 bits
-    #endif
     class StringKey {
     public:
         char* key;
@@ -25,19 +22,20 @@
             uint16_t length;
         #endif
 	
-    	StringKey() { key = nullptr; length = 0; }
+    	StringKey() 
+	{ 
+	    key = nullptr; 
+	    length = 0; 
+	#ifdef MAX_LENGTH
+	    mkey = 0;
+	#endif
+	}
 
     	StringKey(char* k, uint16_t len) 
         {
             key = k; length = len; 
         #ifdef MAX_LENGTH
-            mkey = 0;
-            if (len > MIN_LEN)
-            {
-                int bytes = len - MIN_LEN;
-                for (int i = 0, j = 6 - bytes; i < bytes; i++, j++)
-                    ((char*)&mkey)[j] = k[i];
-            }
+	    mkey = *((uint64_t*)k) >> (2 + MAX_LENGTH - len);
         #endif
         }
 

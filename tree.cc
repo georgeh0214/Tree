@@ -3,45 +3,87 @@
 // Inner
 Node* Inner::findChildSetPos(key_type key, short* pos)
 {
-#ifdef Binary_Search
-    int l = 1, r = this->count(), mid;
-    while (l <= r) {
-        mid = (l + r) >> 1;
-        if (key <= this->ent[mid].key)
-            r = mid - 1;
-        else
-            l = mid + 1;
-    }
-    *pos = r;
-    return this->ent[r].child;
+#ifdef MAX_LENGTH
+    #ifdef Binary_Search
+        int l = 1, r = this->count(), mid;
+        while (l <= r) {
+            mid = (l + r) >> 1;
+            if (key.mkey <= this->ent[mid].key.mkey)
+                r = mid - 1;
+            else
+                l = mid + 1;
+        }
+        *pos = r;
+        return this->ent[r].child;
+    #else
+        uint64_t i;
+        for (i = 1; i <= this->count(); i++)
+            if (key.mkey <= this->ent[i].key.mkey)
+                break;
+        *pos = --i;
+        return this->ent[i].child;
+    #endif
 #else
-    uint64_t i;
-    for (i = 1; i <= this->count(); i++)
-        if (key <= this->ent[i].key)
-            break;
-    *pos = --i;
-    return this->ent[i].child;
+    #ifdef Binary_Search
+        int l = 1, r = this->count(), mid;
+        while (l <= r) {
+            mid = (l + r) >> 1;
+            if (key <= this->ent[mid].key)
+                r = mid - 1;
+            else
+                l = mid + 1;
+        }
+        *pos = r;
+        return this->ent[r].child;
+    #else
+        uint64_t i;
+        for (i = 1; i <= this->count(); i++)
+            if (key <= this->ent[i].key)
+                break;
+        *pos = --i;
+        return this->ent[i].child;
+    #endif
 #endif
 }
 
 Node* Inner::findChild(key_type key)
 {
-#ifdef Binary_Search
-    int l = 1, r = this->count(), mid;
-    while (l <= r) {
-        mid = (l + r) >> 1;
-        if (key <= this->ent[mid].key)
-            r = mid - 1;
-        else
-            l = mid + 1;
-    }
-    return this->ent[r].child;
+#ifdef MAX_LENGTH
+    #ifdef Binary_Search
+        int l = 1, r = this->count(), mid;
+        while (l <= r) {
+            mid = (l + r) >> 1;
+            if (key.mkey <= this->ent[mid].key.mkey)
+                r = mid - 1;
+            else
+                l = mid + 1;
+        }
+        return this->ent[r].child;
+    #else
+        uint64_t i;
+        for (i = 1; i <= this->count(); i++)
+            if (key.meky <= this->ent[i].key.mkey)
+                break;
+        return this->ent[--i].child;
+    #endif
 #else
-    uint64_t i;
-    for (i = 1; i <= this->count(); i++)
-        if (key <= this->ent[i].key)
-            break;
-    return this->ent[--i].child;
+    #ifdef Binary_Search
+        int l = 1, r = this->count(), mid;
+        while (l <= r) {
+            mid = (l + r) >> 1;
+            if (key <= this->ent[mid].key)
+                r = mid - 1;
+            else
+                l = mid + 1;
+        }
+        return this->ent[r].child;
+    #else
+        uint64_t i;
+        for (i = 1; i <= this->count(); i++)
+            if (key <= this->ent[i].key)
+                break;
+        return this->ent[--i].child;
+    #endif
 #endif
 }
 

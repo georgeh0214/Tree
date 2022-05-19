@@ -11,7 +11,10 @@
 // #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
-    // #define MAX_LENGTH 65535 // if defined will use mkey for comparison
+    #define MAX_LENGTH 8
+    #ifdef MAX_LENGTH
+        int MIN_LEN =  MAX_LENGTH - 6; // mkey is 48 bits
+    #endif
     class StringKey {
     public:
         char* key;
@@ -22,9 +25,21 @@
             uint16_t length;
         #endif
 	
-	StringKey() { key = nullptr; length = 0; }
+    	StringKey() { key = nullptr; length = 0; }
 
-	StringKey(char* k, uint16_t len) { key = k; length = len; }
+    	StringKey(char* k, uint16_t len) 
+        {
+            key = k; length = len; 
+        #ifdef MAX_LENGTH
+            mkey = 0;
+            if (len > MIN_LEN)
+            {
+                int bytes = len - MIN_LEN;
+                for (int i = 0, j = 6 - bytes; i < bytes; i++, j++)
+                    ((char*)&mkey)[j] = k[i];
+            }
+        #endif
+        }
 
         inline int compare(const StringKey &other) 
         {

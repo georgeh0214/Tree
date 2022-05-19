@@ -35,7 +35,10 @@
         {
             key = k; length = len; 
         #ifdef MAX_LENGTH
-	    mkey = *((uint64_t*)k) >> (2 + MAX_LENGTH - len);
+            mkey = 0;
+            int bytes = MAX_LENGTH - len;
+            if (bytes < 6)
+	           mkey = *((uint64_t*)k) >> ((2 + bytes) * 8);
         #endif
         }
 

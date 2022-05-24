@@ -7,14 +7,14 @@
 // #define PM
 #define FINGERPRINT
 #define EARLY_SPLIT 2
-// #define Binary_Search // slower than linear search
+//#define Binary_Search // slower than linear search
 #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
     #define PREFIX
     static inline uint64_t getPrefix(char* k, uint64_t len)
     {
-        uint64_t prefix = __builtin_bswap64(*(uint64_t*)k);
+	uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
         return prefix;
     }
     struct StringKey {

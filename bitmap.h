@@ -11,11 +11,16 @@
 #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
-    #define MAX_LENGTH 8
+    #define PREFIX
+    static inline uint64_t getPrefix(char* k, uint64_t len)
+    {
+        uint64_t prefix = __builtin_bswap64(*(uint64_t*)k);
+        return prefix;
+    }
     struct StringKey {
         char* key;
-        #ifdef MAX_LENGTH
-            uint64_t mkey : 48;
+        #ifdef PREFIX
+            uint64_t prefix : 48;
             uint64_t length : 16;
         #else
             uint16_t length;
@@ -25,19 +30,16 @@
     	{ 
     	    key = nullptr; 
     	    length = 0; 
-    	#ifdef MAX_LENGTH
-    	    mkey = 0;
+    	#ifdef PREFIX
+    	    prefix = 0;
     	#endif
     	}
 
     	StringKey(char* k, uint16_t len) 
         {
             key = k; length = len; 
-        #ifdef MAX_LENGTH
-            mkey = 0;
-            int bytes = MAX_LENGTH - len;
-            if (bytes < 6)
-	           mkey = __bswap_64(*((uint64_t*)k)) >> ((2 + bytes) * 8); // little endian
+        #ifdef PREFIX
+            prefix = getPrefix(k, len);
         #endif
         }
 

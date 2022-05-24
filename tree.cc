@@ -3,12 +3,12 @@
 // Inner
 Node* Inner::findChildSetPos(key_type key, short* pos)
 {
-#ifdef MAX_LENGTH
+#ifdef PREFIX
     #ifdef Binary_Search
         int l = 1, r = this->count(), mid;
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (key.mkey <= this->ent[mid].key.mkey)
+            if (key.prefix <= this->ent[mid].key.prefix)
                 r = mid - 1;
             else
                 l = mid + 1;
@@ -18,7 +18,7 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
     #else
         uint64_t i;
         for (i = 1; i <= this->count(); i++)
-            if (key.mkey <= this->ent[i].key.mkey && key <= this->ent[i].key)
+            if (key.prefix <= this->ent[i].key.prefix && key <= this->ent[i].key)
                 break;
         *pos = --i;
         return this->ent[i].child;
@@ -48,12 +48,12 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
 
 Node* Inner::findChild(key_type key)
 {
-#ifdef MAX_LENGTH
+#ifdef PREFIX
     #ifdef Binary_Search
         int l = 1, r = this->count(), mid;
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (key.mkey <= this->ent[mid].key.mkey)
+            if (key.prefix <= this->ent[mid].key.prefix)
                 r = mid - 1;
             else
                 l = mid + 1;
@@ -62,7 +62,7 @@ Node* Inner::findChild(key_type key)
     #else
         uint64_t i;
         for (i = 1; i <= this->count(); i++)
-            if (key.mkey <= this->ent[i].key.mkey && key <= this->ent[i].key)
+            if (key.prefix <= this->ent[i].key.prefix && key <= this->ent[i].key)
                 break;
         return this->ent[--i].child;
     #endif

@@ -15,7 +15,7 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
         }
         if (r < this->count()) // not right most child
         {
-            if (key.prefix < this->ent[r + 1].prefix) // key is in between ent[r] and ent[r + 1]
+            if (key.prefix < this->ent[r + 1].key.prefix) // key is in between ent[r] and ent[r + 1]
             {
                 *pos = r;
                 return this->ent[r].child;
@@ -87,6 +87,34 @@ Node* Inner::findChild(key_type key)
                 r = mid - 1;
             else
                 l = mid + 1;
+        }
+	if (r < this->count()) // not right most child
+        {
+            if (key.prefix < this->ent[r + 1].key.prefix) // key is in between ent[r] and ent[r + 1]
+            {
+                return this->ent[r].child;
+            }
+            else // key prefix == ent[r + 1].prefix, may need to search both way
+            {
+                int res = key.compare(ent[r + 1].key);
+                if (res > 0) // key > ent[r + 1], search right
+                {
+                    for (++r; r <= this->count(); r++)
+                    {
+                        if (key.prefix <= this->ent[r].key.prefix && key <= this->ent[r].key)
+                            break;
+                    }
+                    r --;
+                }
+                else if (res < 0) // key < ent[r + 1], search left
+                {
+                    for (r; r > 0; r--)
+                    {
+                        if (key.prefix >= this->ent[r].key.prefix && key >= this->ent[r].key)
+                            break;
+                    }
+                }
+            }
         }
         return this->ent[r].child;
     #else

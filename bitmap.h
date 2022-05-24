@@ -17,6 +17,7 @@
 	uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
         return prefix;
     }
+    
     struct StringKey {
         char* key;
         #ifdef PREFIX

@@ -4,7 +4,7 @@
 Node* Inner::findChildSetPos(key_type key, short* pos)
 {
 #ifdef PREFIX
-    #ifdef Binary_Search
+    #ifdef Binary_Search // first ent[i].key >= key, return i-1, otherwise i
         int l = 1, r = this->count(), mid;
         while (l <= r) {
             mid = (l + r) >> 1;
@@ -12,6 +12,36 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
                 r = mid - 1;
             else
                 l = mid + 1;
+        }
+        if (r < this->count()) // not right most child
+        {
+            if (key.prefix < this->ent[r + 1].prefix) // key is in between ent[r] and ent[r + 1]
+            {
+                *pos = r;
+                return this->ent[r].child;
+            }
+            else // key prefix == ent[r + 1].prefix, may need to search both way
+            {
+                int res = key.compare(ent[r + 1].key);
+                if (res > 0) // key > ent[r + 1], search right
+                {
+                    for (++r; r <= this->count(); r++)
+                    {
+                        if (key.prefix <= this->ent[r].key.prefix && key <= this->ent[r].key)
+                            break;
+                    }
+                    r --;
+                }
+                else if (res < 0) // key < ent[r + 1], search left
+                {
+                    for (r; r > 0; r--)
+                    {
+                        if (key.prefix >= this->ent[r].key.prefix && key >= this->ent[r].key)
+                            break;
+                    }
+                    *pos = r;
+                }
+            }
         }
         *pos = r;
         return this->ent[r].child;

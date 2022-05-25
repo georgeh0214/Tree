@@ -14,7 +14,7 @@
     #define PREFIX
     static inline uint64_t getPrefix(char* k, uint64_t len)
     {
-	uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
+        uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
         return prefix;
     }
     

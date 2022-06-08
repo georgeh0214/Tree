@@ -2,57 +2,60 @@
 #include <thread>
 #include <chrono>
 #include <immintrin.h>
+#include <random>
+#include "tree.h"
 
 using namespace std;
 
-uint64_t lock;
-bool stop = false;
+#define N 1000000
+#define MAX_LENGTH 26
 
-void inc(){
-	int i = lock;
-	lock = i + 1;
-}
+char* keys[N];
+short lens[N];
 
-void Writer() {
-	uint64_t i = 0;
-	uint64_t count = 0;
-Again1:
-//	if (_xbegin() != _XBEGIN_STARTED)
-//		goto Again1;
-//	for (i = 0; i < 100000000000; i++)
-//		lock = i;
-//	inc();
-//	lock ++;
-//	count ++;
-//	_xend();
-//	if (!stop)
-//		goto Again1;
-	while (!stop)
-		lock++;
-	printf("Write thread completed %llu iterations\n", count);
-}
-
-void Reader() {
-	uint64_t val, count = 0;
-Again2:
-	if (_xbegin() != _XBEGIN_STARTED)
-		goto Again2;
-	val = lock;
-	count ++;
-	_xend();
-	if (!stop)
-		goto Again2;
-	printf("Read thread completed %llu iterations\n", count);
+void generateStringKey()
+{
+	short len;
+	for (int i = 0; i < N; i++)
+	{
+		len = rand() % MAX_LENGTH + 1;
+		keys[i] = new char[len];
+		for (int j = 0; j < len; j++)
+			keys[i][j] = rand() % 256;
+		lens[i] = len;
+	}
 }
 
 int main(int argc, char const *argv[])
 {
-	std::thread t1(Writer);
-	std::thread t2(Reader);
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-	stop = true;
-	t1.join();
-	t2.join();
+	srand(time(NULL));
+	tree t_;
+	generateStringKey();
+	key_type k;
+	val_type v = nullptr;
+	for (int i = 0; i < N; i++)
+	{
+		key_type k(keys[i], lens[i]);
+		t_.insert(k, v);
+	}
+	
+	for (int i = 0; i < N; i++)
+	{
+		k = key_type(keys[i], lens[i]);
+		if (!t_.lookup(k, v))
+		{
+			printf("Missing key!\n");
+			exit(1);
+		}
+	}
+	for (int i = 0; i < N; i++)
+	{
+		k = key_type(keys[i], lens[i]);
+		if (!t_.update(k, nullptr))
+		{
+			printf("Update failed!\n");
+			exit(1);
+		}
+	}
 	return 0;
 }

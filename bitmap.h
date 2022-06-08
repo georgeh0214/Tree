@@ -14,7 +14,8 @@
 #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
-    #define PREFIX
+    //#define ALLOC_KEY
+    //#define PREFIX
     static inline uint64_t getPrefix(char* k, uint64_t len)
     {
         uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;

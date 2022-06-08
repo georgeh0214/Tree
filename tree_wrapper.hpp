@@ -5,7 +5,6 @@
 #include <sys/types.h>
 
 // #define DEBUG_MSG
-#define ALLOC_KEY
 
 class tree_wrapper : public tree_api
 {

@@ -27,8 +27,8 @@ all: ${TARGETS}
 # 	${CC} -o liblbtree_wrapper.so ${CFLAGS} -fPIC -shared ${INCLUDE} lbtree-src/lbtree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
 # lbtree: lbtree-src/lbtree.h lbtree-src/lbtree.cc ${COMMON_DEPENDS}
 # 	${CC} -o $@ ${CFLAGS} ${INCLUDE} lbtree-src/lbtree.cc ${COMMON_SOURCES} ${LIB}
-main: main.cpp 
-	${CC} main.cpp ${CFLAGS}
+main: main.cpp tree.cc
+	${CC} main.cpp tree.cc ${CFLAGS}
 
 tree_wrapper: tree_wrapper.hpp tree_wrapper.cpp ${COMMON_DEPENDS}
 	${CC} -o libtree_wrapper.so ${CFLAGS} -ljemalloc -fPIC -shared tree_wrapper.cpp ${COMMON_SOURCES} ${LIB}

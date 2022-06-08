@@ -221,7 +221,7 @@ RetryFindLeafAssumeSplit:
     return leaf;
 }
 
-bool tree::lockStack(Leaf* n)
+bool tree::lockStack(Leaf* n) // ToDo: Is only locking top most ancester enough
 {
     int i, h = pos_[0];
     for (i = 1; i <= h; i++)

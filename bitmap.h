@@ -6,8 +6,11 @@
 
 // #define PM
 #define FINGERPRINT
+#define SIMD
+#define PREFETCH
+#define BRANCH_PRED
 #define EARLY_SPLIT 2
-//#define Binary_Search // slower than linear search
+//#define Binary_Search // only faster with STRING_KEY
 #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary

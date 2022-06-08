@@ -80,7 +80,7 @@ public:
         n->unlock();
         return false;
     }
-    void unlock() { versionLock.fetch_add(0b10); }
+    void unlock() { versionLock.fetch_add(0b10); } // ToDo: is incrementing version necessary on retry?
 // leaf only
     bool alt() { return versionLock.load() & 0b1; }
     void unlockFlipAlt(bool alt) { alt? versionLock.fetch_add(0b1) : versionLock.fetch_add(0b11); }

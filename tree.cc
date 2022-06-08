@@ -1,11 +1,12 @@
 #include "tree.h"
 
 // Inner
-Node* Inner::findChildSetPos(key_type key, short* pos)
+int Inner::find(key_type key)
 {
+    int r;
 #ifdef PREFIX
     #ifdef Binary_Search // first ent[i].key >= key, return i-1, otherwise i
-        int l = 1, r = this->count(), mid;
+        int l = 1, mid; r = this->count();
         while (l <= r) {
             mid = (l + r) >> 1;
             if (key.prefix <= this->ent[mid].key.prefix)
@@ -30,19 +31,15 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
                         break;
             }
         }
-        *pos = r;
-        return this->ent[r].child;
     #else
-        uint64_t i;
-        for (i = 1; i <= this->count(); i++)
-            if (key.prefix <= this->ent[i].key.prefix && key <= this->ent[i].key)
+        for (r = 1; r <= this->count(); r++)
+            if (key.prefix <= this->ent[r].key.prefix && key <= this->ent[r].key)
                 break;
-        *pos = --i;
-        return this->ent[i].child;
+        r--;
     #endif
 #else
     #ifdef Binary_Search
-        int l = 1, r = this->count(), mid;
+        int l = 1, mid; r = this->count();
         while (l <= r) {
             mid = (l + r) >> 1;
             if (key <= this->ent[mid].key)
@@ -50,75 +47,25 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
             else
                 l = mid + 1;
         }
-        *pos = r;
-        return this->ent[r].child;
     #else
-        uint64_t i;
-        for (i = 1; i <= this->count(); i++)
-            if (key <= this->ent[i].key)
+        for (r = 1; r <= this->count(); r++)
+            if (key <= this->ent[r].key)
                 break;
-        *pos = --i;
-        return this->ent[i].child;
+        r--;
     #endif
 #endif
+    return r;
+}
+
+Node* Inner::findChildSetPos(key_type key, short* pos)
+{
+    *pos = find(key);
+    return this->ent[*pos].child;
 }
 
 Node* Inner::findChild(key_type key)
 {
-#ifdef PREFIX
-    #ifdef Binary_Search
-        int l = 1, r = this->count(), mid;
-        while (l <= r) {
-            mid = (l + r) >> 1;
-            if (key.prefix <= this->ent[mid].key.prefix)
-                r = mid - 1;
-            else
-                l = mid + 1;
-        }
-        if (r < this->count() && key.prefix == this->ent[r + 1].key.prefix) // not right most child and may have collision
-        {
-            int res = key.compare(ent[r + 1].key);
-            if (res > 0) // key > ent[r + 1], search right
-            {
-                for (++r; r <= this->count(); r++)
-                    if (key.prefix <= this->ent[r].key.prefix && key <= this->ent[r].key)
-                        break;
-                r --;
-            }
-            else if (res < 0) // key < ent[r + 1], search left
-            {
-                for (r; r > 0; r--)
-                    if (key.prefix >= this->ent[r].key.prefix && key >= this->ent[r].key)
-                        break;
-            }
-        }
-        return this->ent[r].child;
-    #else
-        uint64_t i;
-        for (i = 1; i <= this->count(); i++)
-            if (key.prefix <= this->ent[i].key.prefix && key <= this->ent[i].key)
-                break;
-        return this->ent[--i].child;
-    #endif
-#else
-    #ifdef Binary_Search
-        int l = 1, r = this->count(), mid;
-        while (l <= r) {
-            mid = (l + r) >> 1;
-            if (key <= this->ent[mid].key)
-                r = mid - 1;
-            else
-                l = mid + 1;
-        }
-        return this->ent[r].child;
-    #else
-        uint64_t i;
-        for (i = 1; i <= this->count(); i++)
-            if (key <= this->ent[i].key)
-                break;
-        return this->ent[--i].child;
-    #endif
-#endif
+    return this->ent[find(key)].child;
 }
 
 // Leaf

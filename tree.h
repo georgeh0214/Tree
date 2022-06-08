@@ -96,6 +96,7 @@ public:
     uint64_t& count() { return *((uint64_t*)(ent)); }
     bool isFull() { return count() == INNER_KEY_NUM; }
 
+    int find(key_type key);
     Node* findChildSetPos(key_type key, short* pos);
     Node* findChild(key_type key);
 

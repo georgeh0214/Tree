@@ -122,6 +122,23 @@ int Leaf::findKey(key_type key)
 }
 
 // Tree
+void tree::initOp(key_type& key)
+{
+#ifdef FINGERPRINT
+    key_hash_ = getOneByteHash(key);
+#endif
+}
+
+void tree::resetPrefix(key_type& key)
+{
+#ifdef PREFIX
+    key_prefix_ = key.prefix;
+    #ifdef ADAPTIVE_PREFIX
+        key_prefix_offset_ = 0;
+    #endif
+#endif
+}
+
 Leaf* tree::findLeaf(key_type key, uint64_t& version, bool lock)
 {
     uint64_t currentVersion, previousVersion;
@@ -421,19 +438,3 @@ RetryScan:
     } while (!sh.stop());
 }
 
-void tree::initOp(key_type& key)
-{
-#ifdef FINGERPRINT
-    key_hash_ = getOneByteHash(key);
-#endif
-}
-
-void tree::resetPrefix(key_type& key)
-{
-#ifdef PREFIX
-    key_prefix_ = key.prefix;
-    #ifdef ADAPTIVE_PREFIX
-        key_prefix_offset_ = 0;
-    #endif
-#endif
-}

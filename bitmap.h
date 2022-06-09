@@ -71,7 +71,7 @@
             if (length < other.length)
             {
             #ifdef ADAPTIVE_PREFIX
-                red = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, length - key_prefix_offset_);
+                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, length - key_prefix_offset_);
             #else
                 res = std::memcmp(key, other.key, length);
             #endif
@@ -80,7 +80,7 @@
             else
             {
             #ifdef ADAPTIVE_PREFIX
-                red = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, other.length - key_prefix_offset_);
+                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, other.length - key_prefix_offset_);
             #else
                 res = std::memcmp(key, other.key, other.length);
             #endif

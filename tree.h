@@ -13,6 +13,13 @@ thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
 
+#ifdef PREFIX
+    thread_local static uint64_t key_prefix_;
+    #ifdef ADAPTIVE_PREFIX
+        thread_local static int key_prefix_offset_;
+    #endif
+#endif
+
 class Node;
 struct InnerEntry
 {
@@ -91,15 +98,58 @@ class Inner : public Node
 public:
     InnerEntry ent[INNER_KEY_NUM + 1]; // count stored in first key
 
-    Inner() { count() = 0; }
+    Inner() 
+    { 
+        count() = 0;
+    #ifdef ADAPTIVE_PREFIX
+        prefix_offset() = 0;
+    #endif
+    }
     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
-    uint64_t& count() { return *((uint64_t*)(ent)); }
+    int& count() { return *((int*)(ent)); }
+#ifdef ADAPTIVE_PREFIX
+    int& prefix_offset() { return ((int*)(ent))[1]; }
+    void adjustPrefix(short index) // for inner that contains inserted key
+    {
+        int cnt = count();
+        if (index == 1 || index == cnt)
+        {
+            uint16_t prefix_offset = this->prefix_offset();
+            int len = std::min(this->ent[1].key.length, this->ent[cnt].key.length), j;
+            for (int i = 0; i < len; i++)
+                if (this->ent[1].key.key[i] != this->ent[cnt].key.key[i])
+                    break;
+            if (i != prefix_offset)
+            {
+                this->prefix_offset() = i;
+                for (j = 1; j <= cnt; j++)
+                    this->ent[j].key.prefix = getPrefixWithOffset(this->ent[j].key.key, this->ent[j].key.length, i);
+            }
+        }
+        else
+            adjustPrefix();
+    }
+    void adjustPrefix() // for inner that only contains original keys
+    {
+        uint16_t prefix_offset = this->prefix_offset();
+        int cnt = this->count();
+        while (this->ent[1].key.prefix == this->ent[cnt].key.prefix) 
+        {
+            prefix_offset += 6;
+            this->ent[1].key.prefix = getPrefixWithOffset(this->ent[1].key.key, this->ent[1].key.length, prefix_offset);
+            this->ent[cnt].key.prefix = getPrefixWithOffset(this->ent[cnt].key.key, this->ent[cnt].key.length, prefix_offset);
+        }
+        for (int i = 2; i < cnt; i++)
+            this->ent[i].key.prefix = getPrefixWithOffset(this->ent[i].key.key, this->ent[i].key.length, prefix_offset);
+        this->prefix_offset() = prefix_offset;
+    }
+#endif
     bool isFull() { return count() == INNER_KEY_NUM; }
 
     int find(key_type key);
     Node* findChildSetPos(key_type key, short* pos);
     Node* findChild(key_type key);
-
+    inline void insertChild(short index, key_type key, Node* child); // insert key, child at index, does not increment count
 
 } __attribute__((aligned(64)));
 
@@ -170,7 +220,8 @@ private:
     Leaf* findLeaf(key_type key, uint64_t& version, bool lock);
     Leaf* findLeafAssumeSplit(key_type key);
     bool lockStack(Leaf* n);
-
+    inline void initOp(key_type& key);
+    inline void resetPrefix();
 };
 
 static inline unsigned long long rdtsc(void)

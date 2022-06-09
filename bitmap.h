@@ -15,10 +15,23 @@
 
 #ifdef STRING_KEY // change length type if necessary
     //#define ALLOC_KEY
-    //#define PREFIX
-    static inline uint64_t getPrefix(char* k, uint64_t len)
+
+    #define PREFIX
+    #ifdef PREFIX
+        // #define ADAPTIVE_PREFIX
+    #endif
+    
+    static inline uint64_t getPrefix(char* k, uint16_t len)
     {
         uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
+        return prefix;
+    }
+
+    static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
+    {
+        if (offset >= len)
+            return 0;
+        uint64_t prefix = __bswap_64(*((uint64_t*)(k + offset))) >> 16;
         return prefix;
     }
     
@@ -63,6 +76,21 @@
             }
         }
 
+        inline int compare(const StringKey &other, uint16_t compare_len) // this->length >= len
+        {
+            int res;
+            if (other.length < compare_len) // second key is too short
+            {
+                res = std::memcmp(key, other.key, other.length);
+                return res? res : 1;
+            }
+            else
+            {
+                res = std::memcmp(key, other.key, compare_len);
+                return res;
+            }
+        }
+
         inline bool operator<(const StringKey &other) { return compare(other) < 0; }
         inline bool operator>(const StringKey &other) { return compare(other) > 0; }
         inline bool operator==(const StringKey &other) { return compare(other) == 0; }
@@ -73,7 +101,7 @@
 
     typedef StringKey key_type;
 #else
-    typedef uint64_t key_type; // key type shoud be >= 8 bytes, count is stored in first key of inner
+    typedef uint64_t key_type; // ADAPTIVE_PREFIX: key type >= 8 bytes, otherwise >= 4. count is stored in first key of inner
 #endif
 typedef void* val_type;
 

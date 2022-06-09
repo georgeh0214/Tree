@@ -5,35 +5,46 @@ int Inner::find(key_type key)
 {
     int r;
 #ifdef PREFIX
+    #ifdef ADAPTIVE_PREFIX 
+        int node_prefix_offset = this->prefix_offset();
+        int res = this->ent[1].key.compare(key, node_prefix_offset);
+        if (res != 0) // partial key before prefix do not match, either left most child or right most child
+            return res < 0? this->count() : 0;
+        if (key_prefix_offset_ != node_prefix_offset) // update search key prefix and offset if necessary
+        {
+            key_prefix_offset_ = node_prefix_offset;
+            key_prefix_ = getPrefixWithOffset(key.key, key.length, key_prefix_offset_);
+        }
+    #endif
     #ifdef Binary_Search // first ent[i].key >= key, return i-1, otherwise i
         int l = 1, mid; r = this->count();
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (key.prefix <= this->ent[mid].key.prefix)
+            if (key_prefix_ <= this->ent[mid].key.prefix)
                 r = mid - 1;
             else
                 l = mid + 1;
         }
-        if (r < this->count() && key.prefix == this->ent[r + 1].key.prefix) // not right most child and may have collision
+        if (r < this->count() && key_prefix_ == this->ent[r + 1].key.prefix) // not right most child and may have collision
         {
             int res = key.compare(ent[r + 1].key);
             if (res > 0) // key > ent[r + 1], search right
             {
                 for (++r; r <= this->count(); r++)
-                    if (key.prefix <= this->ent[r].key.prefix && key <= this->ent[r].key)
+                    if (key_prefix_ <= this->ent[r].key.prefix && key <= this->ent[r].key)
                         break;
                 r --;
             }
             else if (res < 0) // key < ent[r + 1], search left
             {
                 for (r; r > 0; r--)
-                    if (key.prefix >= this->ent[r].key.prefix && key >= this->ent[r].key)
+                    if (key_prefix_ >= this->ent[r].key.prefix && key >= this->ent[r].key)
                         break;
             }
         }
     #else
         for (r = 1; r <= this->count(); r++)
-            if (key.prefix <= this->ent[r].key.prefix && key <= this->ent[r].key)
+            if (key_prefix_ <= this->ent[r].key.prefix && key <= this->ent[r].key)
                 break;
         r--;
     #endif
@@ -66,6 +77,15 @@ Node* Inner::findChildSetPos(key_type key, short* pos)
 Node* Inner::findChild(key_type key)
 {
     return this->ent[find(key)].child;
+}
+
+void Inner::insertChild(short index, key_type key, Node* child)
+{
+#ifdef ADAPTIVE_PREFIX
+    key.prefix = getPrefixWithOffset(key.key, key.length, this->prefix_offset());
+#endif
+    this->ent[i].key = key;
+    this->ent[i].child = child;
 }
 
 // Leaf
@@ -111,6 +131,7 @@ Leaf* tree::findLeaf(key_type key, uint64_t& version, bool lock)
     int i;
 
 RetryFindLeaf: 
+    resetPrefix();
     previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
@@ -138,6 +159,7 @@ Leaf* tree::findLeafAssumeSplit(key_type key)
     int i;
 
 RetryFindLeafAssumeSplit:
+    resetPrefix();
     previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
@@ -189,9 +211,8 @@ bool tree::lookup(key_type key, val_type& val)
     uint64_t version;
     Leaf* leaf;
     int i;
-#ifdef FINGERPRINT
-    key_hash_ = getOneByteHash(key);
-#endif
+
+    initOp(key);
 
 RetryLookup:
     leaf = findLeaf(key, version, false);
@@ -207,9 +228,8 @@ bool tree::update(key_type key, val_type new_val)
     uint64_t version;
     Leaf* leaf;
     int i;
-#ifdef FINGERPRINT
-    key_hash_ = getOneByteHash(key);
-#endif
+
+    initOp(key);
 
 RetryUpdate:
     leaf = findLeaf(key, version, true);
@@ -224,9 +244,8 @@ bool tree::insert(key_type key, val_type val)
     Inner* current;
     Leaf* leaf;
     int i, r, count;
-#ifdef FINGERPRINT
-    key_hash_ = getOneByteHash(key);
-#endif
+
+    initOp(key);
 
 RetryInsert: 
     leaf = findLeafAssumeSplit(key);
@@ -284,37 +303,48 @@ RetryInsert:
             {
                 for (i = count; i >= p; i--)
                     current->ent[i + 1] = current->ent[i];
-                current->ent[p].key = split_key;
-                current->ent[p].child = new_child;
+                current->insertChild(p, split_key, new_child);
                 current->count() ++;
+                #ifdef ADAPTIVE_PREFIX
+                    current->adjustPrefix(p);
+                #endif
                 current->unlock();
                 return true;
             }
             new_inner = new (allocate_inner()) Inner(); // else split inner
+            #ifdef ADAPTIVE_PREFIX
+                new_inner->prefix_offset() = current->prefix_offset();
+            #endif
 #define LEFT_KEY_NUM (INNER_KEY_NUM / 2)
 #define RIGHT_KEY_NUM (INNER_KEY_NUM - LEFT_KEY_NUM)
+            current->count() = LEFT_KEY_NUM;
+            new_inner->count() = RIGHT_KEY_NUM;
             if (p <= LEFT_KEY_NUM) // insert to left inner
             {
                 for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; r >= 0; r--, i--)
                     new_inner->ent[r] = current->ent[i];
                 for (i = LEFT_KEY_NUM - 1; i >= p; i--)
                     current->ent[i + 1] = current->ent[i];
-                current->ent[p].key = split_key;
-                current->ent[p].child = new_child;
+                current->insertChild(p, split_key, new_child);
+            #ifdef ADAPTIVE_PREFIX
+                current->adjustPrefix(p);
+                new_inner->adjustPrefix();
+            #endif
             }
             else
             {
                 for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; i >= p; i--, r--)
                     new_inner->ent[r] = current->ent[i];
-                new_inner->ent[r].key = split_key;
-                new_inner->ent[r].child = new_child;
+                new_inner->insertChild(r, split_key, new_child);
                 for (--r; r >= 0; r--, i--)
                     new_inner->ent[r] = current->ent[i];
+            #ifdef ADAPTIVE_PREFIX
+                current->adjustPrefix();
+                new_inner->adjustPrefix(r);
+            #endif
             }
             split_key = new_inner->ent[0].key;
             new_child = new_inner;
-            current->count() = LEFT_KEY_NUM;
-            new_inner->count() = RIGHT_KEY_NUM;
             if (level < h) // do not unlock root
                 current->unlock();
         }
@@ -324,8 +354,10 @@ RetryInsert:
         while (!new_inner->lock()) {}
         new_inner->count() = 1;
         new_inner->ent[0].child = this->root;
-        new_inner->ent[1].child = new_child;
-        new_inner->ent[1].key = split_key;
+        // #ifdef ADAPTIVE_PREFIX
+        //     new_inner->prefix_offset() = split_key.length;
+        // #endif
+        new_inner->insertChild(1, split_key, new_child);
 
         Node* old_root = this->root;
         this->root = new_inner;
@@ -347,8 +379,11 @@ void tree::rangeScan(key_type start_key, ScanHelper& sh)
     int i;
     // std::vector<Leaf*> leaves; // ToDo: is phantom allowed?
 
+    initOp(key);
+
 RetryScan:
     sh.reset();
+    resetPrefix();
     leaf = findLeaf(start_key, leaf_version, false);
     bits = leaf->bitmap.bits;
     for (int i = 0; bits != 0; i++, bits = bits >> 1)
@@ -382,4 +417,21 @@ RetryScan:
         leaf = next_leaf;
         leaf_version = next_version;
     } while (!sh.stop());
+}
+
+void tree::initOp(key_type& key)
+{
+#ifdef FINGERPRINT
+    key_hash_ = getOneByteHash(key);
+#endif
+}
+
+void tree::resetPrefix()
+{
+#ifdef PREFIX
+    key_prefix_ = key.prefix;
+    #ifdef ADAPTIVE_PREFIX
+        key_prefix_offset_ = 0;
+    #endif
+#endif
 }

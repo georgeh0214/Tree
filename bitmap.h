@@ -18,14 +18,19 @@
 
     #define PREFIX
     #ifdef PREFIX
+        thread_local static uint64_t key_prefix_;
+
         // #define ADAPTIVE_PREFIX
-        static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
-        {
-            if (offset >= len)
-                return 0;
-            uint64_t prefix = __bswap_64(*((uint64_t*)(k + offset))) >> 16;
-            return prefix;
-        }
+        #ifdef ADAPTIVE_PREFIX
+            thread_local static int key_prefix_offset_;
+            static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
+            {
+                if (offset >= len)
+                    return 0;
+                uint64_t prefix = __bswap_64(*((uint64_t*)(k + offset))) >> 16;
+                return prefix;
+            }
+        #endif
     #endif
     
     static inline uint64_t getPrefix(char* k, uint16_t len)
@@ -65,12 +70,20 @@
             int res;
             if (length < other.length)
             {
+            #ifdef ADAPTIVE_PREFIX
+                red = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, length - key_prefix_offset_);
+            #else
                 res = std::memcmp(key, other.key, length);
+            #endif
                 return res? res : -1;
             }
             else
             {
+            #ifdef ADAPTIVE_PREFIX
+                red = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, other.length - key_prefix_offset_);
+            #else
                 res = std::memcmp(key, other.key, other.length);
+            #endif
                 return  res? res : length == other.length? 0 : 1;
             }
         }

@@ -13,13 +13,6 @@ thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
 
-#ifdef PREFIX
-    thread_local static uint64_t key_prefix_;
-    #ifdef ADAPTIVE_PREFIX
-        thread_local static int key_prefix_offset_;
-    #endif
-#endif
-
 class Node;
 struct InnerEntry
 {
@@ -111,12 +104,12 @@ public:
     int& prefix_offset() { return ((int*)(ent))[1]; }
     void adjustPrefix(short index) // for inner that contains inserted key
     {
-        int cnt = count();
+        int cnt = count(), i;
         if (index == 1 || index == cnt)
         {
             uint16_t prefix_offset = this->prefix_offset();
             int len = std::min(this->ent[1].key.length, this->ent[cnt].key.length), j;
-            for (int i = 0; i < len; i++)
+            for (i = 0; i < len; i++)
                 if (this->ent[1].key.key[i] != this->ent[cnt].key.key[i])
                     break;
             if (i != prefix_offset)

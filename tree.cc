@@ -84,8 +84,8 @@ void Inner::insertChild(short index, key_type key, Node* child)
 #ifdef ADAPTIVE_PREFIX
     key.prefix = getPrefixWithOffset(key.key, key.length, this->prefix_offset());
 #endif
-    this->ent[i].key = key;
-    this->ent[i].child = child;
+    this->ent[index].key = key;
+    this->ent[index].child = child;
 }
 
 // Leaf
@@ -131,7 +131,7 @@ Leaf* tree::findLeaf(key_type key, uint64_t& version, bool lock)
     int i;
 
 RetryFindLeaf: 
-    resetPrefix();
+    resetPrefix(key);
     previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
@@ -159,7 +159,7 @@ Leaf* tree::findLeafAssumeSplit(key_type key)
     int i;
 
 RetryFindLeafAssumeSplit:
-    resetPrefix();
+    resetPrefix(key);
     previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
@@ -379,11 +379,11 @@ void tree::rangeScan(key_type start_key, ScanHelper& sh)
     int i;
     // std::vector<Leaf*> leaves; // ToDo: is phantom allowed?
 
-    initOp(key);
+    initOp(start_key);
 
 RetryScan:
     sh.reset();
-    resetPrefix();
+    resetPrefix(key);
     leaf = findLeaf(start_key, leaf_version, false);
     bits = leaf->bitmap.bits;
     for (int i = 0; bits != 0; i++, bits = bits >> 1)
@@ -426,7 +426,7 @@ void tree::initOp(key_type& key)
 #endif
 }
 
-void tree::resetPrefix()
+void tree::resetPrefix(key_type& key)
 {
 #ifdef PREFIX
     key_prefix_ = key.prefix;

@@ -19,19 +19,18 @@
     #define PREFIX
     #ifdef PREFIX
         // #define ADAPTIVE_PREFIX
+        static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
+        {
+            if (offset >= len)
+                return 0;
+            uint64_t prefix = __bswap_64(*((uint64_t*)(k + offset))) >> 16;
+            return prefix;
+        }
     #endif
     
     static inline uint64_t getPrefix(char* k, uint16_t len)
     {
         uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
-        return prefix;
-    }
-
-    static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
-    {
-        if (offset >= len)
-            return 0;
-        uint64_t prefix = __bswap_64(*((uint64_t*)(k + offset))) >> 16;
         return prefix;
     }
     

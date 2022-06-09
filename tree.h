@@ -188,8 +188,22 @@ public:
     {
         printf("Inner size:%d \n", sizeof(Inner));
         printf("Leaf size:%d \n", sizeof(Leaf));
+    #ifdef Binary_Search
+        printf("Binary search.\n");
+    #else
+        printf("Linear search.\n");
+    #endif
     #ifdef FINGERPRINT
         printf("Fingerprint enabled.\n");
+    #endif
+    #ifdef STRING_KEY
+        printf("Using String Key.\n");
+    #endif
+    #ifdef PREFIX
+        printf("Prefix enabled.\n");
+    #endif
+    #ifdef ADAPTIVE_PREFIX
+        printf("Adaptive prefix enabled.\n");
     #endif
         height = 0;
         root = new (allocate_leaf()) Leaf();

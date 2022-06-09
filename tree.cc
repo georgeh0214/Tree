@@ -318,7 +318,6 @@ RetryInsert:
 #define LEFT_KEY_NUM (INNER_KEY_NUM / 2)
 #define RIGHT_KEY_NUM (INNER_KEY_NUM - LEFT_KEY_NUM)
             current->count() = LEFT_KEY_NUM;
-            new_inner->count() = RIGHT_KEY_NUM;
             if (p <= LEFT_KEY_NUM) // insert to left inner
             {
                 for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; r >= 0; r--, i--)
@@ -326,6 +325,8 @@ RetryInsert:
                 for (i = LEFT_KEY_NUM - 1; i >= p; i--)
                     current->ent[i + 1] = current->ent[i];
                 current->insertChild(p, split_key, new_child);
+                split_key = new_inner->ent[0].key;
+                new_inner->count() = RIGHT_KEY_NUM;
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix(p);
                 new_inner->adjustPrefix();
@@ -338,12 +339,13 @@ RetryInsert:
                 new_inner->insertChild(r, split_key, new_child);
                 for (--r; r >= 0; r--, i--)
                     new_inner->ent[r] = current->ent[i];
+                split_key = new_inner->ent[0].key;
+                new_inner->count() = RIGHT_KEY_NUM;
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix();
                 new_inner->adjustPrefix(r);
             #endif
             }
-            split_key = new_inner->ent[0].key;
             new_child = new_inner;
             if (level < h) // do not unlock root
                 current->unlock();

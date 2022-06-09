@@ -221,7 +221,7 @@ private:
     Leaf* findLeafAssumeSplit(key_type key);
     bool lockStack(Leaf* n);
     inline void initOp(key_type& key);
-    inline void resetPrefix();
+    inline void resetPrefix(key_type& key);
 };
 
 static inline unsigned long long rdtsc(void)

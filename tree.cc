@@ -383,7 +383,7 @@ void tree::rangeScan(key_type start_key, ScanHelper& sh)
 
 RetryScan:
     sh.reset();
-    resetPrefix(key);
+    resetPrefix(start_key);
     leaf = findLeaf(start_key, leaf_version, false);
     bits = leaf->bitmap.bits;
     for (int i = 0; bits != 0; i++, bits = bits >> 1)

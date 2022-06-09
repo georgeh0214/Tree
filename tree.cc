@@ -346,6 +346,7 @@ RetryInsert:
                 new_inner->count() = RIGHT_KEY_NUM;
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix(p);
+                new_inner->prefix_offset() = current->prefix_offset();
                 new_inner->adjustPrefix();
             #endif
             }
@@ -360,6 +361,7 @@ RetryInsert:
                 new_inner->count() = RIGHT_KEY_NUM;
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix();
+                new_inner->prefix_offset() = current->prefix_offset();
                 new_inner->adjustPrefix(r);
             #endif
             }

@@ -132,9 +132,12 @@ public:
             this->ent[1].key.prefix = getPrefixWithOffset(this->ent[1].key.key, this->ent[1].key.length, prefix_offset);
             this->ent[cnt].key.prefix = getPrefixWithOffset(this->ent[cnt].key.key, this->ent[cnt].key.length, prefix_offset);
         }
-        for (int i = 2; i < cnt; i++)
-            this->ent[i].key.prefix = getPrefixWithOffset(this->ent[i].key.key, this->ent[i].key.length, prefix_offset);
-        this->prefix_offset() = prefix_offset;
+        if (prefix_offset != this->prefix_offset())
+        {
+            for (int i = 2; i < cnt; i++)
+                this->ent[i].key.prefix = getPrefixWithOffset(this->ent[i].key.key, this->ent[i].key.length, prefix_offset);
+            this->prefix_offset() = prefix_offset;
+        }
     }
 #endif
     bool isFull() { return count() == INNER_KEY_NUM; }

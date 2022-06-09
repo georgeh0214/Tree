@@ -1,4 +1,5 @@
 #include <cstring>
+#include <algorithm>
 
 #define INNER_KEY_NUM 38
 #define LEAF_KEY_NUM 64 // <= 64 due to bitmap
@@ -10,24 +11,28 @@
 #define PREFETCH
 #define BRANCH_PRED
 #define EARLY_SPLIT 2
-//#define Binary_Search // only faster with STRING_KEY
+#define Binary_Search // only faster with STRING_KEY
 #define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
-    //#define ALLOC_KEY
+    #define ALLOC_KEY
 
     #define PREFIX
     #ifdef PREFIX
         thread_local static uint64_t key_prefix_;
 
-        // #define ADAPTIVE_PREFIX
+        #define ADAPTIVE_PREFIX
         #ifdef ADAPTIVE_PREFIX
             thread_local static int key_prefix_offset_;
             static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
             {
-                if (offset >= len)
-                    return 0;
-                uint64_t prefix = __bswap_64(*((uint64_t*)(k + offset))) >> 16;
+		uint64_t prefix = 0;
+		int bytes_to_copy = len - offset;
+                if (bytes_to_copy > 0)
+ 		{
+		    std::memcpy(&prefix, k + offset, std::min((int)6, bytes_to_copy));
+                    prefix = __bswap_64(prefix) >> 16;
+		}        	
                 return prefix;
             }
         #endif
@@ -35,7 +40,9 @@
     
     static inline uint64_t getPrefix(char* k, uint16_t len)
     {
-        uint64_t prefix = __bswap_64(*((uint64_t*)k)) >> 16;
+	uint64_t prefix = 0;
+        std::memcpy(&prefix, k, std::min((uint16_t)6, len));
+	prefix = __bswap_64(prefix) >> 16;
         return prefix;
     }
     
@@ -70,20 +77,20 @@
             int res;
             if (length < other.length)
             {
-            #ifdef ADAPTIVE_PREFIX
-                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, length - key_prefix_offset_);
-            #else
+//            #ifdef ADAPTIVE_PREFIX
+//                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, length - key_prefix_offset_);
+//            #else
                 res = std::memcmp(key, other.key, length);
-            #endif
+//            #endif
                 return res? res : -1;
             }
             else
             {
-            #ifdef ADAPTIVE_PREFIX
-                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, other.length - key_prefix_offset_);
-            #else
+//            #ifdef ADAPTIVE_PREFIX
+//                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, other.length - key_prefix_offset_);
+//            #else
                 res = std::memcmp(key, other.key, other.length);
-            #endif
+//            #endif
                 return  res? res : length == other.length? 0 : 1;
             }
         }

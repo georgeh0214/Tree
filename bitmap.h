@@ -26,13 +26,13 @@
             thread_local static int key_prefix_offset_;
             static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
             {
-		uint64_t prefix = 0;
-		int bytes_to_copy = len - offset;
+        		uint64_t prefix = 0;
+        		int bytes_to_copy = len - offset;
                 if (bytes_to_copy > 0)
- 		{
-		    std::memcpy(&prefix, k + offset, std::min((int)6, bytes_to_copy));
+         		{
+        		    std::memcpy(&prefix, k + offset, std::min((int)6, bytes_to_copy));
                     prefix = __bswap_64(prefix) >> 16;
-		}        	
+        		}        	
                 return prefix;
             }
         #endif
@@ -40,9 +40,9 @@
     
     static inline uint64_t getPrefix(char* k, uint16_t len)
     {
-	uint64_t prefix = 0;
+        uint64_t prefix = 0;
         std::memcpy(&prefix, k, std::min((uint16_t)6, len));
-	prefix = __bswap_64(prefix) >> 16;
+        prefix = __bswap_64(prefix) >> 16;
         return prefix;
     }
     

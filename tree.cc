@@ -260,7 +260,8 @@ bool tree::insert(key_type key, val_type val)
 {
     Inner* current;
     Leaf* leaf;
-    int i, r, count;
+    int i, r, count, cur_offset;
+    short p;
 
     initOp(key);
 
@@ -315,7 +316,7 @@ RetryInsert:
         {
             current = anc_[level];
             count = current->count();
-            short p = pos_[level] + 1;
+            p = pos_[level] + 1;
             if (count < INNER_KEY_NUM) // if last inner to update
             {
                 for (i = count; i >= p; i--)
@@ -330,7 +331,8 @@ RetryInsert:
             }
             new_inner = new (allocate_inner()) Inner(); // else split inner
             #ifdef ADAPTIVE_PREFIX
-                new_inner->prefix_offset() = current->prefix_offset();
+                cur_offset = current->prefix_offset();
+                new_inner->prefix_offset() = cur_offset;
             #endif
 #define LEFT_KEY_NUM (INNER_KEY_NUM / 2)
 #define RIGHT_KEY_NUM (INNER_KEY_NUM - LEFT_KEY_NUM)
@@ -346,7 +348,7 @@ RetryInsert:
                 new_inner->count() = RIGHT_KEY_NUM;
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix(p);
-                new_inner->prefix_offset() = current->prefix_offset();
+                new_inner->prefix_offset() = cur_offset;
                 new_inner->adjustPrefix();
             #endif
             }
@@ -361,7 +363,7 @@ RetryInsert:
                 new_inner->count() = RIGHT_KEY_NUM;
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix();
-                new_inner->prefix_offset() = current->prefix_offset();
+                new_inner->prefix_offset() = cur_offset;
                 new_inner->adjustPrefix(r);
             #endif
             }

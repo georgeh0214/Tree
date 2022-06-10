@@ -357,6 +357,7 @@ RetryInsert:
                 for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; i >= p; i--, r--)
                     new_inner->ent[r] = current->ent[i];
                 new_inner->insertChild(r, split_key, new_child);
+                p = r;
                 for (--r; r >= 0; r--, i--)
                     new_inner->ent[r] = current->ent[i];
                 split_key = new_inner->ent[0].key;
@@ -364,7 +365,7 @@ RetryInsert:
             #ifdef ADAPTIVE_PREFIX
                 current->adjustPrefix();
                 new_inner->prefix_offset() = cur_offset;
-                new_inner->adjustPrefix(r);
+                new_inner->adjustPrefix(p);
             #endif
             }
             new_child = new_inner;

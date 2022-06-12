@@ -1,7 +1,7 @@
 #include <cstring>
 #include <algorithm>
 
-#define INNER_KEY_NUM 38
+#define INNER_KEY_NUM 256
 #define LEAF_KEY_NUM 64 // <= 64 due to bitmap
 #define MAX_HEIGHT 32 // should be enough
 
@@ -24,6 +24,7 @@
         #define ADAPTIVE_PREFIX
         #ifdef ADAPTIVE_PREFIX
             thread_local static int key_prefix_offset_;
+	    thread_local static bool common_prefix_;
             static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
             {
                 uint64_t prefix = 0;
@@ -109,6 +110,18 @@
                 return res;
             }
         }
+
+	inline int compare(const StringKey &other, int offset, int compare_len)
+	{
+	    int res;
+	    int bytes_to_cmp = std::min(compare_len, other.length - offset);
+	    if (bytes_to_cmp > 0)
+	    {
+		res = std::memcmp(key + offset, other.key + offset, bytes_to_cmp);
+		return res? res : (compare_len - bytes_to_cmp);
+	    }
+	    return 1;
+	}
 
         inline bool operator<(const StringKey &other) { return compare(other) < 0; }
         inline bool operator>(const StringKey &other) { return compare(other) > 0; }

@@ -7,7 +7,19 @@ int Inner::find(key_type key)
 #ifdef PREFIX
     #ifdef ADAPTIVE_PREFIX 
         int node_prefix_offset = this->prefix_offset();
-        int res = this->ent[1].key.compare(key, node_prefix_offset);
+/*	int bytes_to_cmp = node_prefix_offset - key_prefix_offset_;
+	if (node_prefix_offset == 0)
+	    common_prefix_ = false;
+	else if (!(common_prefix_ && bytes_to_cmp <= 0))
+	{
+	    int res = this->ent[1].key.compare(key, key_prefix_offset_, bytes_to_cmp);
+            if (res != 0) // partial key before prefix do not match, either left most child or right most child
+                return res < 0? this->count() : 0;
+	    else
+		common_prefix_ = true;
+	}
+*/
+	int res = this->ent[1].key.compare(key, node_prefix_offset);
         if (res != 0) // partial key before prefix do not match, either left most child or right most child
             return res < 0? this->count() : 0;
         if (key_prefix_offset_ != node_prefix_offset) // update search key prefix and offset if necessary
@@ -134,6 +146,7 @@ void tree::resetPrefix(key_type& key)
 #ifdef PREFIX
     key_prefix_ = key.prefix;
     #ifdef ADAPTIVE_PREFIX
+	common_prefix_ = false;
         key_prefix_offset_ = 0;
     #endif
 #endif

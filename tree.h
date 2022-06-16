@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstring>
 #include <atomic>
+#include <vector>
 
 #include "bitmap.h"
 
@@ -13,16 +14,20 @@ thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
 
+
 class Node;
 struct InnerEntry
 {
-    key_type key;
+    int offset;
     Node* child;
 };
 
 struct LeafEntry
 {
-    key_type key;
+#ifdef FINGERPRINT
+    uint8_t fp;
+#endif
+    int offset;
     val_type val;
 };
 
@@ -55,7 +60,7 @@ public:
 
 inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
 {
-    return a.key < b.key; 
+    return true; // ToDo
 }
 
 class Node
@@ -89,89 +94,108 @@ public:
 class Inner : public Node
 {
 public:
-    InnerEntry ent[INNER_KEY_NUM + 1]; // count stored in first key
+    int count;
+    int meta_size;
+    InnerEntry* ent;
 
     Inner() 
-    { 
-        count() = 0;
-    #ifdef ADAPTIVE_PREFIX
-        prefix_offset() = 0;
-    #endif
+    {
+        count() = 0; 
+        meta_size = (char*)(&(ent[1])) - ((char*)this);
+        ent[0].offset = INNER_SIZE;
     }
     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
-    int& count() { return *((int*)(ent)); }
-#ifdef ADAPTIVE_PREFIX
-    int& prefix_offset() { return ((int*)(ent))[1]; }
-    void adjustPrefix(short index) // for inner that contains inserted key
-    {
-        int cnt = count(), i;
-        if (index == 1 || index == cnt)
-        {
-            uint16_t prefix_offset = this->prefix_offset();
-            int len = std::min(this->ent[1].key.length, this->ent[cnt].key.length), j;
-            for (i = 0; i < len; i++)
-                if (this->ent[1].key.key[i] != this->ent[cnt].key.key[i])
-                    break;
-            if (i != prefix_offset)
-            {
-                this->prefix_offset() = i;
-                for (j = 1; j <= cnt; j++)
-                    this->ent[j].key.prefix = getPrefixWithOffset(this->ent[j].key.key, this->ent[j].key.length, i);
-            }
-        }
-        else
-            adjustPrefix();
-    }
-    void adjustPrefix() // for inner that only contains original keys
-    {
-        uint16_t prefix_offset = this->prefix_offset();
-        int cnt = this->count();
-        while (this->ent[1].key.prefix == this->ent[cnt].key.prefix) 
-        {
-            prefix_offset += 6;
-            this->ent[1].key.prefix = getPrefixWithOffset(this->ent[1].key.key, this->ent[1].key.length, prefix_offset);
-            this->ent[cnt].key.prefix = getPrefixWithOffset(this->ent[cnt].key.key, this->ent[cnt].key.length, prefix_offset);
-        }
-        if (prefix_offset != this->prefix_offset())
-        {
-            for (int i = 2; i < cnt; i++)
-                this->ent[i].key.prefix = getPrefixWithOffset(this->ent[i].key.key, this->ent[i].key.length, prefix_offset);
-            this->prefix_offset() = prefix_offset;
-        }
-    }
-#endif
-    bool isFull() { return count() == INNER_KEY_NUM; }
 
-    int find(key_type key);
-    Node* findChildSetPos(key_type key, short* pos);
-    Node* findChild(key_type key);
-    inline void insertChild(short index, key_type key, Node* child); // insert key, child at index, does not increment count
+    int& count() { return count; }
 
-} __attribute__((aligned(64)));
+    inline char* getKey(int idx)
+    {
+        assert(idx >= 1 && idx <= count);
+        return ((char*)this) + ent[idx].offset;
+    }
+
+    inline uint16_t getLen(int idx)
+    {
+        assert(idx >= 1 && idx <= count);
+        return ent[idx - 1].offset - ent[idx].offset;
+    }
+
+    inline int freeSpace()
+    {
+        return ent[count()].offset - meta_size - sizeof(InnerEntry);
+    }
+
+    inline int keySpace()
+    {
+        return INNER_SIZE - ent[count()].offset;
+    }
+
+    inline bool isFull() { return freeSpace() < MAX_KEY_LENGTH; } // assume worst case during split
+
+    int find(char* key, int len);
+    inline Node* findChildSetPos(char* key, int len, short* pos);
+    inline Node* findChild(char* key, int len);
+    inline void insertChild(short index, char* key, int len, Node* child); // insert key, child at index
+};// __attribute__((aligned(64)));
 
 class Leaf : public Node
 {
 public:
-    Bitmap bitmap; // 8 byte
-#ifdef FINGERPRINT
-    uint8_t fp[LEAF_KEY_NUM];
-#endif
-    LeafEntry ent[LEAF_KEY_NUM];
+    int meta_size;
     Leaf* next[2]; // 16 byte
-
-    Leaf() { next[0] = next[1] = nullptr; }
+    LeafEntry* ent;
+    
+    Leaf() 
+    {
+        next[0] = next[1] = nullptr; 
+        meta_size = (char*)(&(ent[1])) - ((char*)this);
+        ent[0].offset = LEAF_SIZE;
+        count() = 0;
+    }
     Leaf(const Leaf& leaf);
     ~Leaf();
 
-    int count() { return bitmap.count(); }
+    int& count() { return (int)(ent[0].val); }
+
+    inline char* getKey(int idx)
+    {
+        assert(idx >= 1 && idx <= count);
+        return ((char*)this) + ent[idx].offset;
+    }
+
+    inline uint16_t getLen(int idx)
+    {
+        assert(idx >= 1 && idx <= count);
+        return ent[idx - 1].offset - ent[idx].offset;
+    }
+
+    inline int freeSpace()
+    {
+        return ent[count()].offset - meta_size - sizeof(LeafEntry);
+    }
+
+    inline int keySpace()
+    {
+        return LEAF_SIZE - ent[count()].offset;
+    }
+
     Leaf* sibling() { return next[alt()]; }
-    void insertEntry(key_type key, val_type val);
-    int findKey(key_type key); // return position of key if found, -1 if not found
-} __attribute__((aligned(64)));
+    inline void appendKeyEntry(char* key, int len, val_type val); // append key, entry, increment count
+    inline int appendKey(char* key, int len); // append key, increment count, return offset
+    inline void updateMeta();
+    void consolidate(std::vector<int>& vec, int len);
+    int findKey(char* key, int len); // return position of key if found, -1 if not found
+}; // __attribute__((aligned(64)));
 
-static Inner* allocate_inner() { return new Inner; }
+static Inner* allocate_inner() 
+{
+    return (Inner*) new char[INNER_SIZE]; 
+}
 
-static Leaf* allocate_leaf() { return new Leaf; }
+static Leaf* allocate_leaf() 
+{ 
+    return (Leaf*) new char[LEAF_SIZE];
+}
 
 class tree
 {
@@ -182,8 +206,9 @@ public:
 
     tree()
     {
-        printf("Inner size:%d \n", sizeof(Inner));
-        printf("Leaf size:%d \n", sizeof(Leaf));
+        printf("Using In-place String Key.\n");
+        printf("Inner size:%d \n", INNER_SIZE);
+        printf("Leaf size:%d \n", LEAF_SIZE);
     #ifdef Binary_Search
         printf("Binary search.\n");
     #else
@@ -192,15 +217,7 @@ public:
     #ifdef FINGERPRINT
         printf("Fingerprint enabled.\n");
     #endif
-    #ifdef STRING_KEY
-        printf("Using String Key.\n");
-    #endif
-    #ifdef PREFIX
-        printf("Prefix enabled.\n");
-    #endif
-    #ifdef ADAPTIVE_PREFIX
-        printf("Adaptive prefix enabled.\n");
-    #endif
+        
         height = 0;
         root = new (allocate_leaf()) Leaf();
         first_leaf = (Leaf*)root;
@@ -212,26 +229,24 @@ public:
     }
 
     // return true and set val if lookup successful, 
-    bool lookup(key_type key, val_type& val);
+    bool lookup(char* key, int len, val_type& val);
 
     // return true if insert successful
-    bool insert(key_type key, val_type val);
+    bool insert(char* key, int len, val_type val);
 
     // return true if delete successful
-    bool del(key_type key);
+    bool del(char* key, int len);
 
     // return true if entry with target key is found and val is set to new_val
-    bool update(key_type key, val_type new_val);
+    bool update(char* key, int len, val_type new_val);
 
     // range scan with customized scan helper class
-    void rangeScan(key_type start_key, ScanHelper& sh);
+    void rangeScan(char* start_key, int len, ScanHelper& sh);
 
 private:
-    Leaf* findLeaf(key_type key, uint64_t& version, bool lock);
-    Leaf* findLeafAssumeSplit(key_type key);
+    Leaf* findLeaf(char* key, int len, uint64_t& version, bool lock);
+    Leaf* findLeafAssumeSplit(char* key, int len);
     bool lockStack(Leaf* n);
-    inline void initOp(key_type& key);
-    inline void resetPrefix(key_type& key);
 };
 
 static inline unsigned long long rdtsc(void)

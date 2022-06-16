@@ -1,8 +1,9 @@
 #include <cstring>
 #include <algorithm>
+#include <cassert>
 
-#define INNER_KEY_NUM 38
-#define LEAF_KEY_NUM 64 // <= 64 due to bitmap
+// #define INNER_KEY_NUM 38
+// #define LEAF_KEY_NUM 64 // <= 64 due to bitmap
 #define MAX_HEIGHT 32 // should be enough
 
 // #define PM
@@ -12,126 +13,91 @@
 #define BRANCH_PRED
 #define EARLY_SPLIT 2
 #define Binary_Search // only faster with STRING_KEY
-#define STRING_KEY 
 
-#ifdef STRING_KEY // change length type if necessary
-    #define ALLOC_KEY
+#define MAX_KEY_LENGTH 2048
+#define INNER_SIZE 4096
+#define LEAF_SIZE 4096
 
-    #define PREFIX
-    #ifdef PREFIX
-        thread_local static uint64_t key_prefix_;
 
-        #define ADAPTIVE_PREFIX
-        #ifdef ADAPTIVE_PREFIX
-            thread_local static int key_prefix_offset_;
-            static inline uint64_t getPrefixWithOffset(char* k, uint16_t len, uint16_t offset)
-            {
-                uint64_t prefix = 0;
-                int bytes_to_copy = len - offset;
-                if (bytes_to_copy > 0)
-                {
-                    std::memcpy(&prefix, k + offset, std::min((int)6, bytes_to_copy));
-                    prefix = __bswap_64(prefix) >> 16;
-                }        	
-                return prefix;
-            }
-        #endif
-    #endif
-    
-    static inline uint64_t getPrefix(char* k, uint16_t len)
+
+inline static int compare(char* k1, uint16_t len1, char* k2, uint16_t len2)
+{
+	int res;
+	if (len1 < len2)
+	{
+		res = std::memcmp(k1, k2, len1);
+        return res? res : -1;
+	}
+	else
     {
-        uint64_t prefix = 0;
-        std::memcpy(&prefix, k, std::min((uint16_t)6, len));
-        prefix = __bswap_64(prefix) >> 16;
-        return prefix;
+        res = std::memcmp(k1, k2, len2);
+        return  res? res : len1 == len2? 0 : 1;
     }
+}
+
+struct StringKey {
+    char* key;
+    uint16_t length;
+
+	StringKey() 
+	{ 
+	    key = nullptr; 
+	    length = 0; 
+	}
+
+	StringKey(char* k, uint16_t len) 
+    {
+        key = k; 
+        length = len; 
+    }
+
+    inline int compare(const StringKey &other) 
+    {
+        int res;
+        if (length < other.length)
+        {
+            res = std::memcmp(key, other.key, length);
+            return res? res : -1;
+        }
+        else
+        {
+            res = std::memcmp(key, other.key, other.length);
+            return  res? res : length == other.length? 0 : 1;
+        }
+    }
+
+    inline int compare(const char* k, uint16_t len)
+    {
+        int res;
+        if (length < len) // second key is too short
+        {
+            res = std::memcmp(key, k, length);
+            return res? res : -1;
+        }
+        else
+        {
+            res = std::memcmp(key, k, len);
+            return  res? res : length == len? 0 : 1;
+        }
+    }
+
     
-    struct StringKey {
-        char* key;
-        #ifdef PREFIX
-            uint64_t prefix : 48;
-            uint64_t length : 16;
-        #else
-            uint16_t length;
-        #endif
-	
-    	StringKey() 
-    	{ 
-    	    key = nullptr; 
-    	    length = 0; 
-    	#ifdef PREFIX
-    	    prefix = 0;
-    	#endif
-    	}
 
-    	StringKey(char* k, uint16_t len) 
-        {
-            key = k; length = len; 
-        #ifdef PREFIX
-            prefix = getPrefix(k, len);
-        #endif
-        }
+    inline bool operator<(const StringKey &other) { return compare(other) < 0; }
+    inline bool operator>(const StringKey &other) { return compare(other) > 0; }
+    inline bool operator==(const StringKey &other) { return compare(other) == 0; }
+    inline bool operator!=(const StringKey &other) { return compare(other) != 0; }
+    inline bool operator<=(const StringKey &other) { return compare(other) <= 0; }
+    inline bool operator>=(const StringKey &other) { return compare(other) >= 0; }
+};
 
-        inline int compare(const StringKey &other) 
-        {
-            int res;
-            if (length < other.length)
-            {
-//            #ifdef ADAPTIVE_PREFIX
-//                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, length - key_prefix_offset_);
-//            #else
-                res = std::memcmp(key, other.key, length);
-//            #endif
-                return res? res : -1;
-            }
-            else
-            {
-//            #ifdef ADAPTIVE_PREFIX
-//                res = std::memcmp(key + key_prefix_offset_, other.key + key_prefix_offset_, other.length - key_prefix_offset_);
-//            #else
-                res = std::memcmp(key, other.key, other.length);
-//            #endif
-                return  res? res : length == other.length? 0 : 1;
-            }
-        }
-
-        inline int compare(const StringKey &other, uint16_t compare_len) // this->length >= len
-        {
-            int res;
-            if (other.length < compare_len) // second key is too short
-            {
-                res = std::memcmp(key, other.key, other.length);
-                return res? res : 1;
-            }
-            else
-            {
-                res = std::memcmp(key, other.key, compare_len);
-                return res;
-            }
-        }
-
-        inline bool operator<(const StringKey &other) { return compare(other) < 0; }
-        inline bool operator>(const StringKey &other) { return compare(other) > 0; }
-        inline bool operator==(const StringKey &other) { return compare(other) == 0; }
-        inline bool operator!=(const StringKey &other) { return compare(other) != 0; }
-        inline bool operator<=(const StringKey &other) { return compare(other) <= 0; }
-        inline bool operator>=(const StringKey &other) { return compare(other) >= 0; }
-    };
-
-    typedef StringKey key_type;
-#else
-    typedef uint64_t key_type; // ADAPTIVE_PREFIX: key type >= 8 bytes, otherwise >= 4. count is stored in first key of inner
-#endif
+// typedef StringKey key_type;
 typedef void* val_type;
 
-inline static uint8_t getOneByteHash(key_type k)
+inline static uint8_t getOneByteHash(char* key, int len)
 {
-#ifdef STRING_KEY
-    uint8_t oneByteHashKey = std::_Hash_bytes(k.key, k.length, 1) & 0xff;
-#else
-    uint8_t oneByteHashKey = std::_Hash_bytes(&k, sizeof(key_type), 1) & 0xff;
-#endif
-    return oneByteHashKey;
+	uint8_t oneByteHashKey = std::_Hash_bytes(key, len, 1) & 0xff;
+	return oneByteHashKey;
 }
 
 /*-----------------------------------------------------------------------------------------------*/

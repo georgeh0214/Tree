@@ -13,6 +13,7 @@ thread_local static Inner* anc_[MAX_HEIGHT];
 thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
+thread_local static char split_key_[MAX_KEY_LENGTH];
 
 
 class Node;
@@ -133,6 +134,7 @@ public:
     inline bool isFull() { return freeSpace() < MAX_KEY_LENGTH; } // assume worst case during split
 
     int find(char* key, int len);
+    int halfIndex();
     inline Node* findChildSetPos(char* key, int len, short* pos);
     inline Node* findChild(char* key, int len);
     inline void insertChild(short index, char* key, int len, Node* child); // insert key, child at index
@@ -180,8 +182,8 @@ public:
     }
 
     Leaf* sibling() { return next[alt()]; }
-    inline void appendKeyEntry(char* key, int len, val_type val); // append key, entry, increment count
-    inline int appendKey(char* key, int len); // append key, increment count, return offset
+    inline void appendKey(char* key, int len, val_type val); // append key, entry, increment count
+    inline void appendKeyEntry(char* key, int len, LeafEntry entry); // append key, ent with new offset, increment count
     inline void updateMeta();
     void consolidate(std::vector<int>& vec, int len);
     int findKey(char* key, int len); // return position of key if found, -1 if not found
@@ -196,6 +198,11 @@ static Leaf* allocate_leaf()
 { 
     return (Leaf*) new char[LEAF_SIZE];
 }
+
+// static char* allocate_key(int size)
+// {
+//     return new char[size];
+// }
 
 class tree
 {

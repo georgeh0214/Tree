@@ -22,6 +22,20 @@ int Inner::find(char* key, int len)
     return r;
 }
 
+int Inner::halfIndex()
+{
+    int l = 1, mid, r = this->count(), half_space = this->keySpace() / 2;
+    while (l <= r) {
+        mid = (l + r) >> 1;
+        if (half_space > (INNER_SIZE - ent[mid].offset))
+            r = mid - 1;
+        else
+            l = mid + 1;
+    }
+    assert(r > 0 && r <= count());
+    return r;
+}
+
 Node* Inner::findChildSetPos(char* key, int len, short* pos)
 {
     *pos = find(key, len);
@@ -53,7 +67,7 @@ Leaf::Leaf(const Leaf& leaf)
     count() = 0;
 }
 
-void Leaf::appendKeyEntry(char* key, int len, val_type val)
+void Leaf::appendKey(char* key, int len, val_type val)
 {
     int index = ++ count();
 #ifdef FINGERPRINT
@@ -65,12 +79,13 @@ void Leaf::appendKeyEntry(char* key, int len, val_type val)
     this->meta_size += sizeof(LeafEntry);
 }
 
-int Leaf::appendKey(char* key, int len)
+void Leaf::appendKeyEntry(char* key, int len, LeafEntry entry)
 {
-    int offset = this->ent[count() ++].offset - len;
-    memcpy(((char*)this) + offset, key, len);
+    int cnt = ++ count();
+    this->ent[cnt] = entry;
+    this->ent[cnt].offset = this->ent[cnt - 1].offset - len;
+    memcpy(getKey(cnt), key, len);
     this->meta_size += sizeof(LeafEntry);
-    return offset;
 }
 
 void Leaf::updateMeta()
@@ -86,9 +101,10 @@ void Leaf::consolidate(std::vector<int>& vec, int len)
     for (i = 0; i < len; i++)
     {
         idx = vec[i];
-        offset = appendKey(getKey(idx), getLen(idx)); // ToDo: is memcpy safe to use with overlapping addresses
-        this->ent[count()] = this->ent[idx];
-        this->ent[count()].offset = offset;
+        if (idx != i + 1)
+            appendKeyEntry(getKey(idx), getLen(idx), ent[idx]); // ToDo: is memcpy safe to use with overlapping addresses
+        else
+            count() ++;
     }
     updateMeta();
 }
@@ -240,7 +256,7 @@ RetryInsert:
     if (!leaf) return false;
     if (leaf->freeSpace() > len) // no split
     {
-        leaf->appendKeyEntry(key, len, val);
+        leaf->appendKey(key, len, val);
         leaf->unlock();
         return true;
     }
@@ -253,7 +269,6 @@ RetryInsert:
         Inner* current, new_inner;
         Leaf* new_leaf;
         int i, idx, l, mid, r, cnt, half_space, offset, split_key_len;
-        char* split_key;
         std::vector<int> sorted_pos(cnt); 
         bool alt;
 
@@ -265,7 +280,7 @@ RetryInsert:
         {
             return compare(leaf->getKey(i), leaf->getLen(i), leaf->getKey(j), leaf->getLen(j)) < 0;
         });
-        // Find position of new insert key
+        // Find position of new insert key (r)
         l = 0; r = cnt - 1;
         while (l <= r) {
             mid = (l + r) >> 1;
@@ -279,53 +294,36 @@ RetryInsert:
         alt = leaf->alt();
         leaf->next[1 - alt] = new_leaf; // track new leaf in unused ptr
         // leaf key redistribution
-        int half_space = ((LEAF_SIZE - leaf->ent[count()].offset) + len) / 2;
-        for (i = cnt - 1; i > r && new_leaf->keySpace() < half_space; i--) // try copy half higher keys to new leaf
+        half_space = leaf->keySpace() / 2;
+        offset = 0;
+        for (i = cnt - 1; offset < half_space; i--) // find greater half keys
         {
-            idx = sorted_pos[i];
-            l = leaf->getLen(idx);
-            offset = new_leaf->appendKey(leaf->getKey(idx), l);
-            cnt = count();
-            new_leaf->ent[cnt] = leaf->ent[idx];
-            new_leaf->ent[cnt].offset = offset;
+            offset += leaf->getLen(sorted_pos[i]);
         }
-        if (new_leaf->keySpace() < half_space) // insert key belongs to new leaf
+        for (l = i + 1; l < cnt; l++) // copy those keys to new leaf in ascending order, may speed up sorting in future split?
         {
-            new_leaf->appendKeyEntry(key, len, val); // insert new key
-            while (new_leaf->keySpace() < half_space) // keep inserting into new leaf
-            {
-                idx = sorted_pos[i];
-                l = leaf->getLen(idx);
-                offset = new_leaf->appendKey(leaf->getKey(idx), l);
-                cnt = count();
-                new_leaf->ent[cnt] = leaf->ent[idx];
-                new_leaf->ent[cnt].offset = offset;
-                i--;
-            }
-            split_key_len = leaf->getLen(sorted_pos[i]); // set split key
-            split_key = leaf->getKey(sorted_pos[i]);
-            // split_key = new char[split_key_len];
-            // std::memcpy(split_key, leaf->getKey(sorted_pos[i]), split_key_len);
-            // consolidate leaf
+            idx = sorted_pos[l];
+            new_leaf->appendKeyEntry(leaf->getKey(idx), leaf->getLen(idx), leaf->ent[idx]);
+        }
+        if (r > i) // if insert key belongs to new leaf
+        {
+            new_leaf->appendKey(key, len, val);
+            split_key_len = leaf->getLen(sorted_pos[i]);
+            std::memcpy(split_key_, leaf->getKey(sorted_pos[i]), split_key_len);
             leaf->consolidate(sorted_pos, i + 1);
         }
-        else // insert key belongs to original leaf
+        else
         {
-            // if (compare(key, len, leaf->getKey(idx), leaf->getLen(idx)) >= 0) // insert key is split key
-            if (r > i) // r is new key insert pos, i is idx of current greatest key in left leaf
+            if (r == i)
             {
                 split_key_len = len;
-                split_key = key;
-                // split_key = new char[split_key_len];
-                // std::memcpy(split_key, key, split_key_len);
+                std::memcpy(split_key_, key, split_key_len);
             }
             else
             {
                 idx = sorted_pos[i];
                 split_key_len = leaf->getLen(idx);
-                split_key = leaf->getKey(idx);
-                // split_key = new char[split_key_len];
-                // std::memcpy(split_key, leaf->getKey(idx), split_key_len);
+                std::memcpy(split_key_, leaf->getKey(idx), split_key_len);
             }
             leaf->consolidate(sorted_pos, i + 1);
             leaf->appendKeyEntry(key, len, val);
@@ -346,7 +344,7 @@ RetryInsert:
             p = pos_[level] + 1;
             if (current->freeSpace() >= split_key_len) // if last inner to update
             {
-                for (i = level + 1; i <= h; i++) // release upper parents not updated
+                for (i = level + 1; i <= h; i++) // release upper parents that will not be updated
                     anc_[i].unlock();
                 key = current->getKey(cnt); // start of last key
                 // ToDo: is memcpy safe to use with overlapping addresses
@@ -356,66 +354,80 @@ RetryInsert:
                     current->ent[i + 1] = current->ent[i];
                     current->ent[i + 1].offset -= split_key_len;
                 }
-                current->insertChild(p, split_key, new_child);
+                current->insertChild(p, split_key_, split_key_len, new_child);
                 current->unlock();
                 return true;
             }
 
             new_inner = new (allocate_inner()) Inner(); // else split inner
-            half_space = (INNER_SIZE - current->ent[cnt].offset + split_key_len) / 2;
-            offset = 0; // simulate left inner key space after split
-
-            // after loop, i is the index that separates original inner into two halves
-            for (i = 1; (INNER_SIZE - current->ent[i].offset) < half_space; i++) {}
+            i = current->halfIndex(); // i is the index that separates original inner into two halves
 
             if (p < i) // split key belongs to left inner
             {
-                for (r = i; r <= cnt; r++) // move all keys with idx >= i to new inner
+                // move all keys & entries with idx >= i to new inner
+                l = current->ent[i - 1].offset - current->ent[cnt].offset;
+                std::memcpy(((char*)new_inner) + INNER_SIZE - l, current->getKey(cnt), l);
+                offset = INNER_SIZE - current->ent[i - 1].offset;
+                for (l = i, r = 1; l <= cnt; l++, r++)
                 {
-                    
+                    new_inner->ent[r] = current->ent[l];
+                    new_inner->ent[r].offset += offset;
                 }
-            }
-
-            for (i = cnt; i > p && offset < half_space; i--) // try copy half higher keys to new inner
-            {
-                offset += current->getLen(i);
-
-                new_inner->ent[++ new_inner->count()]
-                l = leaf->getLen(idx);
-                offset = new_leaf->appendKey(leaf->getKey(idx), l);
-                new_leaf->ent[cnt] = leaf->ent[idx];
-                new_leaf->ent[cnt].offset = offset;
-            }
-
-            if (offset < half_space) // insert split key to new inner
-            {
-                offset += split_key_len;
-                for (i; offset < half_space; i--)
-                    offset += current->getLen(i);
-                for ()
-            }
-
-
-            if (p <= LEFT_KEY_NUM) // insert to left inner
-            {
-                for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; r >= 0; r--, i--)
-                    new_inner->ent[r] = current->ent[i];
-                for (i = LEFT_KEY_NUM - 1; i >= p; i--)
+                new_inner->count() = cnt - i + 1;
+                new_inner->updateMeta();
+                
+                current->count() = cnt = --i;
+                key = current->getKey(cnt); // start of last key
+                // ToDo: is memcpy safe to use with overlapping addresses
+                std::memcpy(key - split_key_len, key, current->ent[p - 1].offset - current->ent[cnt].offset);
+                for (i; i >= p; i--)
+                {
                     current->ent[i + 1] = current->ent[i];
-                current->insertChild(p, split_key, new_child);
-                split_key = new_inner->ent[0].key;
-                new_inner->count() = RIGHT_KEY_NUM;
+                    current->ent[i + 1].offset -= split_key_len;
+                }
+                current->updateMeta();
+                current->insertChild(p, split_key_, split_key_len, new_child);
+                
+                cnt ++;
+                new_inner->ent[0].child = current->ent[cnt].child;
+                
+                split_key_len = current->getLen(cnt);
+                std::memcpy(split_key_, current->getKey(cnt), split_key_len);
+                current->count() --;
+                current->meta_size -= sizeof(InnerEntry);
             }
-            else
+            else // split key belongs to new inner
             {
-                for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; i >= p; i--, r--)
-                    new_inner->ent[r] = current->ent[i];
-                new_inner->insertChild(r, split_key, new_child);
-                p = r;
-                for (--r; r >= 0; r--, i--)
-                    new_inner->ent[r] = current->ent[i];
-                split_key = new_inner->ent[0].key;
-                new_inner->count() = RIGHT_KEY_NUM;
+                // copy keys from index i ~ p-1 to new inner
+                l = current->ent[i - 1].offset - current->ent[p - 1].offset;
+                std::memcpy(((char*)new_inner) + INNER_SIZE - l, current->getKey(p - 1), l);
+                offset = INNER_SIZE - current->ent[i - 1].offset;
+                for (l = i, r = 1; l < p; l++, r++)
+                {
+                    new_inner->ent[r] = current->ent[l];
+                    new_inner->ent[r].offset += offset;
+                }
+                new_inner->count() = p - i;
+                new_inner->updateMeta();
+                new_inner->insertChild(new_inner->count() + 1, split_key_, split_key_len, new_child); // insert new key
+                // copy keys from index p ~ cnt to new inner
+                l = current->ent[p - 1].offset - current->ent[cnt].offset;
+                std::memcpy(new_inner->getKey(new_inner->count()) - l, current->getKey(cnt), l);
+                offset -= split_key_len;
+                for (l = p, r = new_inner->count() + 1; l <= cnt; l++, r++)
+                {
+                    new_inner->ent[r] = current->ent[l];
+                    new_inner->ent[r].offset += offset;
+                }
+                new_inner->count() = cnt - i + 2;
+                new_inner->updateMeta();
+                i--;
+                new_inner->ent[0].child = current->ent[i].child;
+
+                split_key_len = current->getLen(i);
+                std::memcpy(split_key_, current->getKey(i), split_key_len);
+                current->count() = i - 1;
+                current->updateMeta();
             }
             new_child = new_inner;
             if (level < h) // do not unlock root
@@ -425,12 +437,8 @@ RetryInsert:
         // new root
         new_inner = new (allocate_inner()) Inner();
         while (!new_inner->lock()) {}
-        new_inner->count() = 1;
         new_inner->ent[0].child = this->root;
-        // #ifdef ADAPTIVE_PREFIX
-        //     new_inner->prefix_offset() = split_key.length;
-        // #endif
-        new_inner->insertChild(1, split_key, new_child);
+        new_inner->insertChild(1, split_key, split_key_len, new_child);
 
         Node* old_root = this->root;
         this->root = new_inner;
@@ -445,7 +453,7 @@ RetryInsert:
     }
 }
 
-void tree::rangeScan(key_type start_key, ScanHelper& sh)
+void tree::rangeScan(key_type start_key, int len, ScanHelper& sh)
 {
     Leaf* leaf, * next_leaf;
     uint64_t leaf_version, next_version, bits;
@@ -456,40 +464,40 @@ void tree::rangeScan(key_type start_key, ScanHelper& sh)
     key_hash_ = getOneByteHash(key, len);
 #endif
 
-RetryScan:
-    sh.reset();
-    leaf = findLeaf(start_key, leaf_version, false);
-    bits = leaf->bitmap.bits;
-    for (int i = 0; bits != 0; i++, bits = bits >> 1)
-        if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
-            sh.scanEntry(leaf->ent[i]);
-    next_leaf = leaf->sibling();
-    if (!next_leaf)
-    {
-	if (!leaf->checkVersion(leaf_version))
-	    goto RetryScan;
-	return;
-    }
-    if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-        goto RetryScan;
-    leaf = next_leaf;
-    leaf_version = next_version;
-    do {
-        bits = leaf->bitmap.bits;
-        for (int i = 0; bits != 0; i++, bits = bits >> 1) 
-            if (bits & 1) // entry found
-                sh.scanEntry(leaf->ent[i]);
-        next_leaf = leaf->sibling();
-	if (!next_leaf)
-        { 
-            if (!leaf->checkVersion(leaf_version))
-                goto RetryScan;
-            return;
-        }
-        if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-            goto RetryScan;
-        leaf = next_leaf;
-        leaf_version = next_version;
-    } while (!sh.stop());
+// RetryScan:
+//     sh.reset();
+//     leaf = findLeaf(start_key, len, leaf_version, false);
+//     bits = leaf->bitmap.bits;
+//     for (int i = 1; bits != 0; i++, bits = bits >> 1)
+//         if ((bits & 1) && compare(leaf->getKey(i)) >= 0 leaf->ent[i].key >= start_key) // compare with key in first leaf
+//             sh.scanEntry(leaf->ent[i]);
+//     next_leaf = leaf->sibling();
+//     if (!next_leaf)
+//     {
+// 	if (!leaf->checkVersion(leaf_version))
+// 	    goto RetryScan;
+// 	return;
+//     }
+//     if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+//         goto RetryScan;
+//     leaf = next_leaf;
+//     leaf_version = next_version;
+//     do {
+//         bits = leaf->bitmap.bits;
+//         for (int i = 0; bits != 0; i++, bits = bits >> 1) 
+//             if (bits & 1) // entry found
+//                 sh.scanEntry(leaf->ent[i]);
+//         next_leaf = leaf->sibling();
+// 	if (!next_leaf)
+//         { 
+//             if (!leaf->checkVersion(leaf_version))
+//                 goto RetryScan;
+//             return;
+//         }
+//         if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+//             goto RetryScan;
+//         leaf = next_leaf;
+//         leaf_version = next_version;
+//     } while (!sh.stop());
 }
 

@@ -33,7 +33,7 @@ tree_wrapper::~tree_wrapper()
 bool tree_wrapper::find(const char *key, size_t key_sz, char *value_out)
 {
   void* val;
-  bool found = t_.lookup(key, key_sz, val);
+  bool found = t_.lookup(const_cast<char*>(key), key_sz, val);
 
   if (found)
     std::memcpy(value_out, &val, 8);
@@ -42,12 +42,12 @@ bool tree_wrapper::find(const char *key, size_t key_sz, char *value_out)
 
 bool tree_wrapper::insert(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
-  return t_.insert(key, key_sz, value);
+  return t_.insert(const_cast<char*>(key), key_sz, const_cast<char*>(value));
 }
 
 bool tree_wrapper::update(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
-  return t_.update(key, key_sz, value);
+  return t_.update(const_cast<char*>(key), key_sz, const_cast<char*>(value));
 }
 
 bool tree_wrapper::remove(const char *key, size_t key_sz)

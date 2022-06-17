@@ -59,9 +59,9 @@ void Inner::insertChild(short index, char* key, int len, Node* child)
 // Leaf
 Leaf::Leaf(const Leaf& leaf) 
 {
-    versionLock.store(leaf->versionLock.load());
-    next[0] = leaf->next[0];
-    next[1] = leaf->next[1];
+    versionLock.store(leaf.versionLock.load());
+    next[0] = leaf.next[0];
+    next[1] = leaf.next[1];
     meta_size = (char*)(&(ent[1])) - ((char*)this);
     ent[0].offset = LEAF_SIZE;
     count() = 0;
@@ -266,9 +266,9 @@ RetryInsert:
             goto RetryInsert;
 
         Node* new_child;
-        Inner* current, new_inner;
+        Inner* current, * new_inner;
         Leaf* new_leaf;
-        int i, idx, l, mid, r, cnt, half_space, offset, split_key_len;
+        int i, idx, l, mid, r, cnt, half_space, offset, split_key_len, p;
         std::vector<int> sorted_pos(cnt); 
         bool alt;
 
@@ -284,7 +284,7 @@ RetryInsert:
         l = 0; r = cnt - 1;
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (compare(key, len, getKey(sorted_pos[mid]), getLen(sorted_pos[mid])) <= 0)
+            if (compare(key, len, leaf->getKey(sorted_pos[mid]), leaf->getLen(sorted_pos[mid])) <= 0)
                 r = mid - 1;
             else
                 l = mid + 1;
@@ -326,7 +326,7 @@ RetryInsert:
                 std::memcpy(split_key_, leaf->getKey(idx), split_key_len);
             }
             leaf->consolidate(sorted_pos, i + 1);
-            leaf->appendKeyEntry(key, len, val);
+            leaf->appendKey(key, len, val);
         }
         // unlock leaf if not root
         new_leaf->unlock();
@@ -345,7 +345,7 @@ RetryInsert:
             if (current->freeSpace() >= split_key_len) // if last inner to update
             {
                 for (i = level + 1; i <= h; i++) // release upper parents that will not be updated
-                    anc_[i].unlock();
+                    anc_[i]->unlock();
                 key = current->getKey(cnt); // start of last key
                 // ToDo: is memcpy safe to use with overlapping addresses
                 std::memcpy(key - split_key_len, key, current->ent[p - 1].offset - current->ent[cnt].offset); 
@@ -438,7 +438,7 @@ RetryInsert:
         new_inner = new (allocate_inner()) Inner();
         while (!new_inner->lock()) {}
         new_inner->ent[0].child = this->root;
-        new_inner->insertChild(1, split_key, split_key_len, new_child);
+        new_inner->insertChild(1, split_key_, split_key_len, new_child);
 
         Node* old_root = this->root;
         this->root = new_inner;
@@ -453,7 +453,7 @@ RetryInsert:
     }
 }
 
-void tree::rangeScan(key_type start_key, int len, ScanHelper& sh)
+void tree::rangeScan(char* start_key, int len, ScanHelper& sh)
 {
     Leaf* leaf, * next_leaf;
     uint64_t leaf_version, next_version, bits;

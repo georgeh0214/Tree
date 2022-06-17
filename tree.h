@@ -95,7 +95,7 @@ public:
 class Inner : public Node
 {
 public:
-    int count;
+    int cnt;
     int meta_size;
     InnerEntry* ent;
 
@@ -107,17 +107,17 @@ public:
     }
     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
 
-    int& count() { return count; }
+    int& count() { return cnt; }
 
     inline char* getKey(int idx)
     {
-        assert(idx >= 1 && idx <= count);
+        assert(idx >= 1 && idx <= cnt);
         return ((char*)this) + ent[idx].offset;
     }
 
     inline uint16_t getLen(int idx)
     {
-        assert(idx >= 1 && idx <= count);
+        assert(idx >= 1 && idx <= cnt);
         return ent[idx - 1].offset - ent[idx].offset;
     }
 
@@ -129,6 +129,11 @@ public:
     inline int keySpace()
     {
         return INNER_SIZE - ent[count()].offset;
+    }
+
+    void updateMeta()
+    {
+        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
     }
 
     inline bool isFull() { return freeSpace() < MAX_KEY_LENGTH; } // assume worst case during split
@@ -157,17 +162,17 @@ public:
     Leaf(const Leaf& leaf);
     ~Leaf();
 
-    int& count() { return (int)(ent[0].val); }
+    int& count() { return *(int*)(&(ent[0].val)); }
 
     inline char* getKey(int idx)
     {
-        assert(idx >= 1 && idx <= count);
+        assert(idx >= 1 && idx <= count());
         return ((char*)this) + ent[idx].offset;
     }
 
     inline uint16_t getLen(int idx)
     {
-        assert(idx >= 1 && idx <= count);
+        assert(idx >= 1 && idx <= count());
         return ent[idx - 1].offset - ent[idx].offset;
     }
 

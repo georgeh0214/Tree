@@ -320,7 +320,7 @@ RetryInsert:
             assert(idx >= 1 && idx <= leaf->count());
             new_leaf->appendKeyEntry(leaf->getKey(idx), leaf->getLen(idx), leaf->ent[idx]);
         }
-        printf("Leaf count: %d   meta size: %d     i: %d \n", cnt, leaf->meta_size, i);
+        printf("Leaf count: %d   meta size: %d    last key offset: %d    i: %d \n", cnt, leaf->meta_size, ent[cnt].offset, i);
         printf("New leaf should have: %d keys \n", cnt - i - 1);
         assert(new_leaf->count() == (cnt - i - 1));
         // set split key

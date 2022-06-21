@@ -24,14 +24,20 @@ int Inner::find(char* key, int len)
 
 int Inner::halfIndex()
 {
-    int l = 1, mid, r = this->count(), half_space = (INNER_SIZE - meta_size) / 2; //this->keySpace() / 2;
-    while (l <= r) {
-        mid = (l + r) >> 1;
-        if (half_space > (INNER_SIZE - ent[mid].offset))
-            r = mid - 1;
-        else
-            l = mid + 1;
-    }
+    // int l = 1, mid, r = this->count(), half_space = (INNER_SIZE - meta_size) / 2; //this->keySpace() / 2;
+    // while (l <= r) {
+    //     mid = (l + r) >> 1;
+    //     if (half_space > (INNER_SIZE - ent[mid].offset))
+    //         r = mid - 1;
+    //     else
+    //         l = mid + 1;
+    // }
+    int r = (this->count() / 2) + 1, half_space = (INNER_SIZE - meta_size) / 2; //this->keySpace() / 2;
+    assert(r > 0 && r <= count());
+    while (half_space < (INNER_SIZE - ent[r].offset))
+        r--;
+    while (half_space > (INNER_SIZE - ent[r].offset))
+        r++;
     assert(r > 0 && r <= count());
     return r;
 }
@@ -49,11 +55,11 @@ Node* Inner::findChild(char* key, int len)
 
 void Inner::insertChild(short index, char* key, int len, Node* child)
 {
+    count() ++;
     this->ent[index].offset = this->ent[index - 1].offset - len;
     this->ent[index].child = child;
     memcpy(getKey(index), key, len);
     this->meta_size += sizeof(InnerEntry);
-    count() ++;
 }
 
 void Inner::makeSpace(int index, int len)
@@ -109,7 +115,7 @@ void Leaf::consolidate(std::vector<int>& vec, int len)
     {
         idx = vec[i];
         if (idx != i + 1)
-            appendKeyEntry(getKey(idx), getLen(idx), ent[idx]); // ToDo: is memcpy safe to use with overlapping addresses
+            appendKeyEntry(((char*)this) + ent[idx].offset, ent[idx - 1].offset - ent[idx].offset, ent[idx]); // ToDo: is memcpy safe to use with overlapping addresses
         else
             count() ++;
     }

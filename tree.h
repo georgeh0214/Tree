@@ -98,7 +98,7 @@ class Inner : public Node
 public:
     int cnt;
     int meta_size;
-    InnerEntry* ent; // offset + ptr pairs
+    InnerEntry ent[]; // offset + ptr pairs
 
     Inner() 
     {
@@ -148,7 +148,7 @@ class Leaf : public Node
 public:
     int meta_size;
     Leaf* next[2]; // 16 byte
-    LeafEntry* ent;
+    LeafEntry ent[];
     
     Leaf() 
     {

@@ -8,7 +8,7 @@
 using namespace std;
 
 #define N 1000000
-#define MAX_LENGTH 26
+#define MAX_LENGTH 8
 
 char* keys[N];
 short lens[N];

@@ -58,10 +58,10 @@ void Inner::insertChild(short index, char* key, int len, Node* child)
 
 void Inner::makeSpace(int index, int len)
 {
-    char* key = getKey(count()); // start of last key
+    char* key = getKey(cnt); // start of last key
     // ToDo: is memcpy safe to use with overlapping addresses
     std::memcpy(key - len, key, ent[index - 1].offset - ent[cnt].offset); 
-    for (i = cnt; i >= index; i--)
+    for (int i = cnt; i >= index; i--)
     {
         ent[i + 1] = ent[i];
         ent[i + 1].offset -= len;

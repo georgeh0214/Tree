@@ -3,6 +3,7 @@
 // Inner
 int Inner::find(char* key, int len)
 {
+    assert(meta_size == (char*)(&(ent[count() + 1])) - ((char*)this) && "Wrong meta size for inner");
     int r;
 #ifdef Binary_Search
     int l = 1, mid; r = this->count();
@@ -125,6 +126,7 @@ void Leaf::consolidate(std::vector<int>& vec, int len)
 
 int Leaf::findKey(char* key, int len)
 {
+    assert(meta_size == (char*)(&(ent[count() + 1])) - ((char*)this) && "Wrong meta size for Leaf");
     int cnt = count();
     for (int i = 1; i <= cnt; i++)
     {

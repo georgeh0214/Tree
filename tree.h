@@ -179,10 +179,10 @@ public:
         return ent[count()].offset - meta_size - sizeof(LeafEntry);
     }
 
-    // inline int keySpace()
-    // {
-    //     return LEAF_SIZE - ent[count()].offset;
-    // }
+    inline int keySpace()
+    {
+        return LEAF_SIZE - ent[count()].offset;
+    }
 
     inline void updateMeta()
     {

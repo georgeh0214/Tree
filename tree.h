@@ -13,7 +13,8 @@ thread_local static Inner* anc_[MAX_HEIGHT];
 thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
-thread_local static char split_key_[MAX_KEY_LENGTH];
+
+// thread_local static char split_key_[MAX_KEY_LENGTH];
 
 
 class Node;
@@ -35,34 +36,34 @@ struct LeafEntry
 class ScanHelper // implement 
 {
 public:
-    LeafEntry* start;
-    LeafEntry* cur;
-    int scan_size;
-    int scanned;
+    // LeafEntry* start;
+    // LeafEntry* cur;
+    // int scan_size;
+    // int scanned;
 
-    ScanHelper(int c, char* r) // initializer
-    {
-        scanned = 0;
-        scan_size = c; 
-        start = cur = (LeafEntry*)r; 
-    }
+    // ScanHelper(int c, char* r) // initializer
+    // {
+    //     scanned = 0;
+    //     scan_size = c; 
+    //     start = cur = (LeafEntry*)r; 
+    // }
 
-    void reset() { scanned = 0; cur = start; } // called upon retry
+    // void reset() { scanned = 0; cur = start; } // called upon retry
 
-    bool stop() { return scanned >= scan_size; } // this is called once after scanning each leaf
+    // bool stop() { return scanned >= scan_size; } // this is called once after scanning each leaf
 
-    inline void scanEntry(const LeafEntry& ent) // what to do with each entry scanned
-    {
-        *cur = ent;
-        cur ++;
-        scanned ++;
-    }
+    // inline void scanEntry(const LeafEntry& ent) // what to do with each entry scanned
+    // {
+    //     *cur = ent;
+    //     cur ++;
+    //     scanned ++;
+    // }
 };
 
-inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
-{
-    return true; // ToDo
-}
+// inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
+// {
+//     return true; // ToDo
+// }
 
 class Node
 {
@@ -97,17 +98,17 @@ class Inner : public Node
 public:
     int cnt;
     int meta_size;
-    InnerEntry* ent;
+    InnerEntry* ent; // offset + ptr pairs
 
     Inner() 
     {
         count() = 0; 
-        meta_size = (char*)(&(ent[1])) - ((char*)this);
+        updateMeta();
         ent[0].offset = INNER_SIZE;
     }
     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
 
-    int& count() { return cnt; }
+    inline int& count() { return cnt; }
 
     inline char* getKey(int idx)
     {
@@ -126,12 +127,7 @@ public:
         return ent[count()].offset - meta_size - sizeof(InnerEntry);
     }
 
-    inline int keySpace()
-    {
-        return INNER_SIZE - ent[count()].offset;
-    }
-
-    void updateMeta()
+    inline void updateMeta()
     {
         meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
     }
@@ -142,7 +138,9 @@ public:
     int halfIndex();
     inline Node* findChildSetPos(char* key, int len, short* pos);
     inline Node* findChild(char* key, int len);
-    inline void insertChild(short index, char* key, int len, Node* child); // insert key, child at index
+    // insert key, child entry at index, increment cnt, adjust meta_size
+    inline void insertChild(short index, char* key, int len, Node* child); 
+    inline void makeSpace(int index, int len); // shift keys from index i and beyond by len, entries from index i and beyond by 1
 };// __attribute__((aligned(64)));
 
 class Leaf : public Node
@@ -154,15 +152,15 @@ public:
     
     Leaf() 
     {
-        next[0] = next[1] = nullptr; 
-        meta_size = (char*)(&(ent[1])) - ((char*)this);
-        ent[0].offset = LEAF_SIZE;
         count() = 0;
+        next[0] = next[1] = nullptr; 
+        updateMeta();
+        ent[0].offset = LEAF_SIZE;
     }
     Leaf(const Leaf& leaf);
     ~Leaf();
 
-    int& count() { return *(int*)(&(ent[0].val)); }
+    inline int& count() { return *(int*)(&(ent[0].val)); }
 
     inline char* getKey(int idx)
     {
@@ -181,15 +179,19 @@ public:
         return ent[count()].offset - meta_size - sizeof(LeafEntry);
     }
 
-    inline int keySpace()
+    // inline int keySpace()
+    // {
+    //     return LEAF_SIZE - ent[count()].offset;
+    // }
+
+    inline void updateMeta()
     {
-        return LEAF_SIZE - ent[count()].offset;
+        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
     }
 
     Leaf* sibling() { return next[alt()]; }
-    inline void appendKey(char* key, int len, val_type val); // append key, entry, increment count
-    inline void appendKeyEntry(char* key, int len, LeafEntry entry); // append key, ent with new offset, increment count
-    inline void updateMeta();
+    inline void appendKey(char* key, int len, val_type val); // append key, entry, increment count, update meta
+    inline void appendKeyEntry(char* key, int len, LeafEntry entry); // append key, entry with new offset, increment count, update meta
     void consolidate(std::vector<int>& vec, int len);
     int findKey(char* key, int len); // return position of key if found, -1 if not found
 }; // __attribute__((aligned(64)));

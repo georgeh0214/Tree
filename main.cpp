@@ -31,31 +31,28 @@ int main(int argc, char const *argv[])
 	srand(time(NULL));
 	tree t_;
 	generateStringKey();
-	key_type k;
 	val_type v = nullptr;
 	for (int i = 0; i < N; i++)
 	{
-		key_type k(keys[i], lens[i]);
-		t_.insert(k, v);
+		t_.insert(keys[i], lens[i], v);
 	}
 	
 	for (int i = 0; i < N; i++)
 	{
-		k = key_type(keys[i], lens[i]);
-		if (!t_.lookup(k, v))
+		if (!t_.lookup(keys[i], lens[i], v))
 		{
 			printf("Missing key!\n");
 			exit(1);
 		}
 	}
-	for (int i = 0; i < N; i++)
-	{
-		k = key_type(keys[i], lens[i]);
-		if (!t_.update(k, nullptr))
-		{
-			printf("Update failed!\n");
-			exit(1);
-		}
-	}
+
+	// for (int i = 0; i < N; i++)
+	// {
+	// 	if (!t_.update(keys[i], lens[i], v))
+	// 	{
+	// 		printf("Missing key!\n");
+	// 		exit(1);
+	// 	}
+	// }
 	return 0;
 }

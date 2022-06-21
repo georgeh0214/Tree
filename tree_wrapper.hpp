@@ -1,4 +1,3 @@
-#include <omp.h>
 #include "tree_api.hpp"
 #include "tree.h"
 #include <thread>

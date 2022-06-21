@@ -119,6 +119,7 @@ void Leaf::consolidate(std::vector<int>& vec, int len)
         else
             count() ++;
     }
+    assert(count() == len && "Wrong leaf size after consolidation!");
     updateMeta();
 }
 
@@ -127,6 +128,7 @@ int Leaf::findKey(char* key, int len)
     int cnt = count();
     for (int i = 1; i <= cnt; i++)
     {
+        assert(i >= 1 && i <= cnt);
     #ifdef FINGERPRINT
         if (key_hash_ == this->ent[i].fp && compare(key, len, getKey(i), getLen(i)) == 0) // key found
     #else
@@ -292,6 +294,8 @@ RetryInsert:
             sorted_pos[i] = i + 1;
         std::sort(sorted_pos.begin(), sorted_pos.end(), [leaf](int i, int j)
         {
+            assert(i >= 1 && i <= leaf->count());
+            assert(j >= 1 && j <= leaf->count());
             return compare(leaf->getKey(i), leaf->getLen(i), leaf->getKey(j), leaf->getLen(j)) < 0;
         });
 
@@ -305,27 +309,31 @@ RetryInsert:
         offset = 0;
         for (i = cnt - 1; offset < half_space; i--) // find greater half keys, sorted_pos[i] points to split key after loop
         {
-            assert(i >= 0 && "index out of bound!\n");
+            assert(sorted_pos[i] >= 1 && sorted_pos[i] <= leaf->count());
             offset += leaf->getLen(sorted_pos[i]);
         }
         for (l = i + 1; l < cnt; l++) // copy keys from sorted_pos[i+1] ~ [cnt-1] to new leaf in ascending order, may speed up sorting in future split?
         {
             idx = sorted_pos[l];
+            assert(idx >= 1 && idx <= leaf->count());
             new_leaf->appendKeyEntry(leaf->getKey(idx), leaf->getLen(idx), leaf->ent[idx]);
         }
 
         // set split key
         idx = sorted_pos[i++]; // index of split key
+        assert(idx >= 1 && idx <= leaf->count());
         if (compare(key, len, leaf->getKey(idx), leaf->getLen(idx)) > 0) // if insert key belongs to new leaf
         {
             new_leaf->appendKey(key, len, val);
             leaf->consolidate(sorted_pos, i);
+            assert(i >= 1 && i <= leaf->count());
             split_key_len = leaf->getLen(i);
             split_key_ = leaf->getKey(i);
         }
         else
         {
             leaf->consolidate(sorted_pos, i);
+            assert(i >= 1 && i <= leaf->count());
             split_key_len = leaf->getLen(i);
             split_key_ = leaf->getKey(i);
             leaf->appendKey(key, len, val);
@@ -372,14 +380,14 @@ RetryInsert:
                 new_inner->count() = cnt - i + 1;
                 new_inner->updateMeta(); // set left most child later
                 
-                current->count() = --i;
+                current->count() = i - 1;
                 current->updateMeta();
                 current->makeSpace(p, split_key_len);
                 current->insertChild(p, split_key_, split_key_len, new_child);
                 
-                cnt = i + 1; // = count()
+                cnt = i; // = count()
                 new_inner->ent[0].child = current->ent[cnt].child;
-                
+                assert(cnt >= 1 && cnt <= current->count());
                 split_key_len = current->getLen(cnt);
                 split_key_ = current->getKey(cnt);
                 current->count() --;
@@ -412,7 +420,7 @@ RetryInsert:
                 new_inner->updateMeta();
                 i--;
                 new_inner->ent[0].child = current->ent[i].child;
-
+                assert(i >= 1 && i <= current->count());
                 split_key_len = current->getLen(i);
                 split_key_ = current->getKey(i);
                 current->count() = i - 1;

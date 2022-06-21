@@ -307,7 +307,7 @@ RetryInsert:
         leaf->next[1 - alt] = new_leaf; // track new leaf in unused ptr
 
         // leaf key redistribution
-        half_space = leaf->keySpace() / 2; // (LEAF_SIZE - leaf->meta_size) / 2; 
+        half_space = (LEAF_SIZE - leaf->meta_size) / 2; // leaf->keySpace() / 2;
         offset = 0;
         for (i = cnt - 1; offset < half_space; i--) // find greater half keys, sorted_pos[i] points to split key after loop
         {
@@ -320,7 +320,7 @@ RetryInsert:
             assert(idx >= 1 && idx <= leaf->count());
             new_leaf->appendKeyEntry(leaf->getKey(idx), leaf->getLen(idx), leaf->ent[idx]);
         }
-
+        assert(new_leaf->count() == (cnt - i + 1));
         // set split key
         idx = sorted_pos[i++]; // index of split key
         assert(idx >= 1 && idx <= leaf->count());

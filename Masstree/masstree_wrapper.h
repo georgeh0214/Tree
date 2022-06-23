@@ -18,6 +18,13 @@ using namespace Masstree;
 class masstree_wrapper : public tree_api
 {
 public:
+  struct table_params : public Masstree::nodeparams<15,15> {
+      typedef uint64_t value_type;
+      typedef Masstree::value_print<value_type> value_print_type;
+      typedef threadinfo threadinfo_type;
+      typedef key_unparse_unsigned key_unparse_type;
+      static constexpr ssize_t print_max_indent_depth = 12;
+  };
 
   masstree_wrapper();
   virtual ~masstree_wrapper();
@@ -32,7 +39,7 @@ public:
 static __thread typename default_query_table_params::threadinfo_type * ti;
 
 private:
-  default_table mt;
+  Masstree::basic_table<table_params> mt;
 };
 
 __thread typename default_query_table_params::threadinfo_type * masstree_wrapper::ti = nullptr;
@@ -44,10 +51,10 @@ struct ThreadHelper
   {
     if (masstree_wrapper::ti == nullptr)
     {
-      // int id = omp_get_thread_num();
-      // if (id == 0)
-      //   masstree_wrapper::ti = main_threadinfo;
-      // else
+      int id = omp_get_thread_num();
+      if (id == 0)
+        masstree_wrapper::ti = main_threadinfo;
+      else
         masstree_wrapper::ti = threadinfo::make(threadinfo::TI_PROCESS, id);
     }
   }
@@ -62,7 +69,7 @@ masstree_wrapper::masstree_wrapper()
   ti = threadinfo::make(threadinfo::TI_MAIN, -1);
   main_threadinfo = ti;
   mt.initialize(*ti);
-  srand(time(NULL));
+  // srand(time(NULL));
 }
 
 masstree_wrapper::~masstree_wrapper()
@@ -72,17 +79,17 @@ masstree_wrapper::~masstree_wrapper()
 bool masstree_wrapper::find(const char *key, size_t key_sz, char *value_out)
 {
   thread_local ThreadHelper t;
-  Masstree::default_table::unlocked_cursor_type lp(mt.table(), key, key_sz);
+  Masstree::basic_table::unlocked_cursor_type lp(mt.table(), key, key_sz);
   bool found = lp.find_unlocked(*ti);
   if (found)
-    memcpy(value_out, lp.value()->col(0).s, 8);
+    memcpy(value_out, lp.value(), 8);
   return found;
 }
 
 bool masstree_wrapper::insert(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
   thread_local ThreadHelper t;
-  Masstree::default_table::cursor_type lp(mt.table(), key, key_sz);
+  Masstree::basic_table::cursor_type lp(mt.table(), key, key_sz);
   bool found = lp.find_insert(*ti);
   if (!found)
     // lp.value() = row_type::create1(Str(value, value_sz), 2, *ti);
@@ -94,7 +101,7 @@ bool masstree_wrapper::insert(const char *key, size_t key_sz, const char *value,
 bool masstree_wrapper::update(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
   thread_local ThreadHelper t;
-  Masstree::default_table::cursor_type lp(mt.table(), key, key_sz);
+  Masstree::basic_table::cursor_type lp(mt.table(), key, key_sz);
   bool found = lp.find_insert(*ti);
   if (found)
     lp.value() = *(uint64_t*)value;
@@ -107,7 +114,7 @@ bool masstree_wrapper::update(const char *key, size_t key_sz, const char *value,
 bool masstree_wrapper::remove(const char *key, size_t key_sz)
 {
   thread_local ThreadHelper t;
-  Masstree::default_table::cursor_type lp(mt.table(), key, key_sz);
+  Masstree::basic_table::cursor_type lp(mt.table(), key, key_sz);
   bool found = lp.find_locked(*ti);
   lp.finish(-1, *ti);
   return found;

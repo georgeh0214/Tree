@@ -97,13 +97,13 @@ class Inner : public Node
 {
 public:
     int cnt;
-    int meta_size;
+//    int meta_size;
     InnerEntry ent[]; // offset + ptr pairs
 
     Inner() 
     {
         count() = 0; 
-        updateMeta();
+//        updateMeta();
         ent[0].offset = INNER_SIZE;
     }
     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
@@ -124,13 +124,19 @@ public:
 
     inline int freeSpace()
     {
-        return ent[count()].offset - meta_size - sizeof(InnerEntry);
+	return ent[count()].offset - ((char*)(&(ent[count() + 1])) - ((char*)this)) - sizeof(InnerEntry);
+        //return ent[count()].offset - meta_size - sizeof(InnerEntry);
     }
 
-    inline void updateMeta()
+    inline int keySpace()
     {
-        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
+        return INNER_SIZE - ent[count()].offset;
     }
+
+//    inline void updateMeta()
+//    {
+//        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
+//    }
 
     inline bool isFull() { return freeSpace() < MAX_KEY_LENGTH; } // assume worst case during split
 
@@ -146,7 +152,7 @@ public:
 class Leaf : public Node
 {
 public:
-    int meta_size;
+//    int meta_size;
     Leaf* next[2]; // 16 byte
     LeafEntry ent[];
     
@@ -154,7 +160,7 @@ public:
     {
         count() = 0;
         next[0] = next[1] = nullptr; 
-        updateMeta();
+//        updateMeta();
         ent[0].offset = LEAF_SIZE;
     }
     Leaf(const Leaf& leaf);
@@ -176,7 +182,8 @@ public:
 
     inline int freeSpace()
     {
-        return ent[count()].offset - meta_size - sizeof(LeafEntry);
+	return ent[count()].offset - ((char*)(&(ent[count() + 1])) - ((char*)this)) - sizeof(LeafEntry);
+        //return ent[count()].offset - meta_size - sizeof(LeafEntry);
     }
 
     inline int keySpace()
@@ -184,15 +191,15 @@ public:
         return LEAF_SIZE - ent[count()].offset;
     }
 
-    inline void updateMeta()
-    {
-        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
-    }
+//    inline void updateMeta()
+//    {
+//        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
+//    }
 
     Leaf* sibling() { return next[alt()]; }
     inline void appendKey(char* key, int len, val_type val); // append key, entry, increment count, update meta
     inline void appendKeyEntry(char* key, int len, LeafEntry entry); // append key, entry with new offset, increment count, update meta
-    void consolidate(std::vector<int>& vec, int len);
+    int consolidate(std::vector<int>& vec, int len);
     int findKey(char* key, int len); // return position of key if found, -1 if not found
 }; // __attribute__((aligned(64)));
 

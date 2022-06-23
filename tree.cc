@@ -3,7 +3,7 @@
 // Inner
 int Inner::find(char* key, int len)
 {
-    assert(meta_size == (char*)(&(ent[count() + 1])) - ((char*)this) && "Wrong meta size for inner");
+//    assert(meta_size == (char*)(&(ent[count() + 1])) - ((char*)this) && "Wrong meta size for inner");
     int r;
 #ifdef Binary_Search
     int l = 1, mid; r = this->count();
@@ -33,7 +33,7 @@ int Inner::halfIndex()
     //     else
     //         l = mid + 1;
     // }
-    int r = (this->count() / 2) + 1, half_space = (INNER_SIZE - meta_size) / 2; //this->keySpace() / 2;
+    int r = (this->count() / 2) + 1, half_space = this->keySpace() / 2; //(INNER_SIZE - meta_size) / 2; //
     assert(r > 0 && r <= count());
     while (half_space < (INNER_SIZE - ent[r].offset))
         r--;
@@ -60,7 +60,7 @@ void Inner::insertChild(short index, char* key, int len, Node* child)
     this->ent[index].offset = this->ent[index - 1].offset - len;
     this->ent[index].child = child;
     memcpy(getKey(index), key, len);
-    this->meta_size += sizeof(InnerEntry);
+//    this->meta_size += sizeof(InnerEntry);
 }
 
 void Inner::makeSpace(int index, int len)
@@ -83,7 +83,7 @@ Leaf::Leaf(const Leaf& leaf)
     next[1] = leaf.next[1];
     ent[0].offset = LEAF_SIZE;
     count() = 0;
-    updateMeta();
+//    updateMeta();
 }
 
 void Leaf::appendKey(char* key, int len, val_type val)
@@ -95,7 +95,7 @@ void Leaf::appendKey(char* key, int len, val_type val)
     this->ent[index].offset = this->ent[index - 1].offset - len;
     this->ent[index].val = val;
     memcpy(getKey(index), key, len);
-    this->meta_size += sizeof(LeafEntry);
+//    this->meta_size += sizeof(LeafEntry);
 }
 
 void Leaf::appendKeyEntry(char* key, int len, LeafEntry entry)
@@ -104,29 +104,32 @@ void Leaf::appendKeyEntry(char* key, int len, LeafEntry entry)
     this->ent[index] = entry;
     this->ent[index].offset = this->ent[index - 1].offset - len;
     memcpy(getKey(index), key, len);
-    this->meta_size += sizeof(LeafEntry);
+//    this->meta_size += sizeof(LeafEntry);
 }
 
-void Leaf::consolidate(std::vector<int>& vec, int len)
+int Leaf::consolidate(std::vector<int>& vec, int len)
 {
+    int split_key_idx = vec[len - 1], i, idx, ret;
     std::sort(vec.begin(), vec.begin() + len);
     count() = 0;
-    int i, idx, offset;
     for (i = 0; i < len; i++)
     {
         idx = vec[i];
+	if (idx == split_key_idx)
+            ret = i + 1;
         if (idx != i + 1)
             appendKeyEntry(((char*)this) + ent[idx].offset, ent[idx - 1].offset - ent[idx].offset, ent[idx]); // ToDo: is memcpy safe to use with overlapping addresses
         else
             count() ++;
     }
     assert(count() == len && "Wrong leaf size after consolidation!");
-    updateMeta();
+//    updateMeta();
+    return ret;
 }
 
 int Leaf::findKey(char* key, int len)
 {
-    assert(meta_size == (char*)(&(ent[count() + 1])) - ((char*)this) && "Wrong meta size for Leaf");
+//    assert(meta_size == (char*)(&(ent[count() + 1])) - ((char*)this) && "Wrong meta size for Leaf");
     int cnt = count();
     for (int i = 1; i <= cnt; i++)
     {
@@ -274,6 +277,7 @@ RetryInsert:
     if (leaf->freeSpace() >= len) // no split
     {
         leaf->appendKey(key, len, val);
+//	assert(leaf->meta_size == (char*)(&(leaf->ent[leaf->count() + 1])) - ((char*)leaf) && "Wrong meta size for Leaf");
         leaf->unlock();
         return true;
     }
@@ -307,7 +311,7 @@ RetryInsert:
         leaf->next[1 - alt] = new_leaf; // track new leaf in unused ptr
 
         // leaf key redistribution
-        half_space = (LEAF_SIZE - leaf->meta_size) / 2; // leaf->keySpace() / 2;
+        half_space = leaf->keySpace() / 2; //(LEAF_SIZE - leaf->meta_size) / 2; // 
         offset = 0;
         for (i = cnt - 1; offset < half_space; i--) // find greater half keys, sorted_pos[i] points to split key after loop
         {
@@ -320,8 +324,14 @@ RetryInsert:
             assert(idx >= 1 && idx <= leaf->count());
             new_leaf->appendKeyEntry(leaf->getKey(idx), leaf->getLen(idx), leaf->ent[idx]);
         }
-        printf("Leaf count: %d   meta size: %d    last key offset: %d    i: %d \n", cnt, leaf->meta_size, leaf->ent[cnt].offset, i);
-        printf("New leaf should have: %d keys \n", cnt - i - 1);
+for (l = 1; l < cnt; l++)
+        {
+            assert(compare(leaf->getKey(sorted_pos[l-1]), leaf->getLen(sorted_pos[l-1]), leaf->getKey(sorted_pos[l]), leaf->getLen(sorted_pos[l])) < 0);
+        }
+
+//        printf("Leaf count: %d   meta size: %d    last key offset: %d    i: %d \n", cnt, leaf->meta_size, leaf->ent[cnt].offset, i);
+//        printf("New leaf should have: %d keys \n", cnt - i - 1);
+//	  printf("Leaf should have: %d keys \n", i + 1);
         assert(new_leaf->count() == (cnt - i - 1));
         // set split key
         idx = sorted_pos[i++]; // index of split key
@@ -329,20 +339,23 @@ RetryInsert:
         if (compare(key, len, leaf->getKey(idx), leaf->getLen(idx)) > 0) // if insert key belongs to new leaf
         {
             new_leaf->appendKey(key, len, val);
-            leaf->consolidate(sorted_pos, i);
+            i = leaf->consolidate(sorted_pos, i);
             assert(i >= 1 && i <= leaf->count());
             split_key_len = leaf->getLen(i);
             split_key_ = leaf->getKey(i);
         }
         else
         {
-            leaf->consolidate(sorted_pos, i);
+            i = leaf->consolidate(sorted_pos, i);
             assert(i >= 1 && i <= leaf->count());
             split_key_len = leaf->getLen(i);
             split_key_ = leaf->getKey(i);
             leaf->appendKey(key, len, val);
 
         }
+	assert(leaf->count() + new_leaf->count() == cnt + 1);
+//	assert(leaf->meta_size == (char*)(&(leaf->ent[leaf->count() + 1])) - ((char*)leaf) && "Wrong meta size for Leaf");
+//	assert(new_leaf->meta_size == (char*)(&(new_leaf->ent[new_leaf->count() + 1])) - ((char*)new_leaf) && "Wrong meta size for Leaf");
         // unlock leaf if not root
         new_leaf->unlock();
         if (pos_[0] > 0)
@@ -359,7 +372,8 @@ RetryInsert:
             p = pos_[level] + 1;
             if (current->freeSpace() >= split_key_len) // if last inner to update
             {
-                for (i = level + 1; i <= h; i++) // release upper parents that will not be updated
+//                for (i = level + 1; i <= h; i++) // release upper parents that will not be updated
+		for (i = h; i > level; i--)
                     anc_[i]->unlock();
                 current->makeSpace(p, split_key_len); // make space for split key
                 current->insertChild(p, split_key_, split_key_len, new_child); // cnt and meta_size are updated
@@ -382,10 +396,10 @@ RetryInsert:
                     new_inner->ent[r].offset += offset;
                 }
                 new_inner->count() = cnt - i + 1;
-                new_inner->updateMeta(); // set left most child later
+//                new_inner->updateMeta(); // set left most child later
                 
                 current->count() = i - 1;
-                current->updateMeta();
+//                current->updateMeta();
                 current->makeSpace(p, split_key_len);
                 current->insertChild(p, split_key_, split_key_len, new_child);
                 
@@ -395,7 +409,7 @@ RetryInsert:
                 split_key_len = current->getLen(cnt);
                 split_key_ = current->getKey(cnt);
                 current->count() --;
-                current->meta_size -= sizeof(InnerEntry);
+//                current->meta_size -= sizeof(InnerEntry);
             }
             else // split key belongs to new inner
             {
@@ -409,7 +423,7 @@ RetryInsert:
                     new_inner->ent[r].offset += offset;
                 }
                 new_inner->count() = p - i;
-                new_inner->updateMeta();
+//                new_inner->updateMeta();
                 new_inner->insertChild(new_inner->count() + 1, split_key_, split_key_len, new_child); // insert split key
                 // copy keys from index p ~ cnt to new inner
                 len = current->ent[p - 1].offset - current->ent[cnt].offset;
@@ -421,14 +435,14 @@ RetryInsert:
                     new_inner->ent[r].offset += offset;
                 }
                 new_inner->count() = r - 1;
-                new_inner->updateMeta();
+//                new_inner->updateMeta();
                 i--;
                 new_inner->ent[0].child = current->ent[i].child;
                 assert(i >= 1 && i <= current->count());
                 split_key_len = current->getLen(i);
                 split_key_ = current->getKey(i);
                 current->count() = i - 1;
-                current->updateMeta();
+//                current->updateMeta();
             }
             new_child = new_inner;
             if (level < h) // do not unlock root

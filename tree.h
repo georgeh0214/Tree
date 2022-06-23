@@ -14,8 +14,6 @@ thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
 
-// thread_local static char split_key_[MAX_KEY_LENGTH];
-
 
 class Node;
 struct InnerEntry
@@ -97,13 +95,11 @@ class Inner : public Node
 {
 public:
     int cnt;
-//    int meta_size;
     InnerEntry ent[]; // offset + ptr pairs
 
     Inner() 
     {
         count() = 0; 
-//        updateMeta();
         ent[0].offset = INNER_SIZE;
     }
     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
@@ -124,19 +120,13 @@ public:
 
     inline int freeSpace()
     {
-	return ent[count()].offset - ((char*)(&(ent[count() + 1])) - ((char*)this)) - sizeof(InnerEntry);
-        //return ent[count()].offset - meta_size - sizeof(InnerEntry);
+	   return ent[count()].offset - ((char*)(&(ent[count() + 1])) - ((char*)this)) - sizeof(InnerEntry);
     }
 
     inline int keySpace()
     {
         return INNER_SIZE - ent[count()].offset;
     }
-
-//    inline void updateMeta()
-//    {
-//        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
-//    }
 
     inline bool isFull() { return freeSpace() < MAX_KEY_LENGTH; } // assume worst case during split
 
@@ -152,7 +142,6 @@ public:
 class Leaf : public Node
 {
 public:
-//    int meta_size;
     Leaf* next[2]; // 16 byte
     LeafEntry ent[];
     
@@ -160,7 +149,6 @@ public:
     {
         count() = 0;
         next[0] = next[1] = nullptr; 
-//        updateMeta();
         ent[0].offset = LEAF_SIZE;
     }
     Leaf(const Leaf& leaf);
@@ -182,19 +170,13 @@ public:
 
     inline int freeSpace()
     {
-	return ent[count()].offset - ((char*)(&(ent[count() + 1])) - ((char*)this)) - sizeof(LeafEntry);
-        //return ent[count()].offset - meta_size - sizeof(LeafEntry);
+	   return ent[count()].offset - ((char*)(&(ent[count() + 1])) - ((char*)this)) - sizeof(LeafEntry);
     }
 
     inline int keySpace()
     {
         return LEAF_SIZE - ent[count()].offset;
     }
-
-//    inline void updateMeta()
-//    {
-//        meta_size = (char*)(&(ent[count() + 1])) - ((char*)this);
-//    }
 
     Leaf* sibling() { return next[alt()]; }
     inline void appendKey(char* key, int len, val_type val); // append key, entry, increment count, update meta
@@ -212,11 +194,6 @@ static Leaf* allocate_leaf()
 { 
     return (Leaf*) new char[LEAF_SIZE];
 }
-
-// static char* allocate_key(int size)
-// {
-//     return new char[size];
-// }
 
 class tree
 {
@@ -246,6 +223,7 @@ public:
 
     ~tree()
     {
+        printf("Height: %d \n", height);
         // delete (Leaf*)root; ToDo: 
     }
 

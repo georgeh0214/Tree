@@ -50,8 +50,8 @@ int missing = 0;
         }
         if (missing)
             printf("# missing keys: %d \n", missing);
-  	else
-	    printf("Load verified!\n");
+        else
+            printf("Load verified!\n");
         // for (int i = 0; i < N; i++)
         // {
         //      if (!t_.update(keys[i], lens[i], v))

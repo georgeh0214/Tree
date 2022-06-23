@@ -22,9 +22,12 @@ public:
       typedef uint64_t value_type;
       typedef Masstree::value_print<value_type> value_print_type;
       typedef threadinfo threadinfo_type;
-      typedef key_unparse_unsigned key_unparse_type;
+      // typedef key_unparse_unsigned key_unparse_type;
       static constexpr ssize_t print_max_indent_depth = 12;
   };
+
+  typedef Masstree::unlocked_tcursor<table_params> unlocked_cursor_type;
+  typedef Masstree::tcursor<table_params> cursor_type;
 
   masstree_wrapper();
   virtual ~masstree_wrapper();
@@ -79,17 +82,17 @@ masstree_wrapper::~masstree_wrapper()
 bool masstree_wrapper::find(const char *key, size_t key_sz, char *value_out)
 {
   thread_local ThreadHelper t;
-  Masstree::basic_table::unlocked_cursor_type lp(mt.table(), key, key_sz);
+  unlocked_cursor_type lp(mt, key, key_sz);
   bool found = lp.find_unlocked(*ti);
   if (found)
-    memcpy(value_out, lp.value(), 8);
+    *(uint64_t*)value_out = lp.value();
   return found;
 }
 
 bool masstree_wrapper::insert(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
   thread_local ThreadHelper t;
-  Masstree::basic_table::cursor_type lp(mt.table(), key, key_sz);
+  cursor_type lp(mt, key, key_sz);
   bool found = lp.find_insert(*ti);
   if (!found)
     // lp.value() = row_type::create1(Str(value, value_sz), 2, *ti);
@@ -101,7 +104,7 @@ bool masstree_wrapper::insert(const char *key, size_t key_sz, const char *value,
 bool masstree_wrapper::update(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
   thread_local ThreadHelper t;
-  Masstree::basic_table::cursor_type lp(mt.table(), key, key_sz);
+  cursor_type lp(mt, key, key_sz);
   bool found = lp.find_insert(*ti);
   if (found)
     lp.value() = *(uint64_t*)value;
@@ -114,7 +117,7 @@ bool masstree_wrapper::update(const char *key, size_t key_sz, const char *value,
 bool masstree_wrapper::remove(const char *key, size_t key_sz)
 {
   thread_local ThreadHelper t;
-  Masstree::basic_table::cursor_type lp(mt.table(), key, key_sz);
+  cursor_type lp(mt, key, key_sz);
   bool found = lp.find_locked(*ti);
   lp.finish(-1, *ti);
   return found;
@@ -144,18 +147,19 @@ bool masstree_wrapper::remove(const char *key, size_t key_sz)
 
 int masstree_wrapper::scan(const char *key, size_t key_sz, int scan_sz, char *&values_out)
 {
-  constexpr size_t ONE_MB = 1ULL << 20;
-  static thread_local char results[ONE_MB];
-  thread_local ThreadHelper t;
-  int scanned = 0;
-  uint64_t k = *reinterpret_cast<const uint64_t*>(key);
-  swap_endian(k);
+  // constexpr size_t ONE_MB = 1ULL << 20;
+  // static thread_local char results[ONE_MB];
+  // thread_local ThreadHelper t;
+  // int scanned = 0;
+  // uint64_t k = *reinterpret_cast<const uint64_t*>(key);
+  // swap_endian(k);
 
-  values_out = results;
-  scanner s(values_out, scan_sz, key_sz, key_sz);
+  // values_out = results;
+  // scanner s(values_out, scan_sz, key_sz, key_sz);
 
-  scanned = mt.table().scan(Str((const char*)&k, key_sz), true, s, *ti);
-  return scanned;
+  // scanned = mt.scan(Str((const char*)&k, key_sz), true, s, *ti);
+  // return scanned;
+  return 0;
 }
 
 inline void masstree_wrapper::swap_endian(uint64_t &i) {

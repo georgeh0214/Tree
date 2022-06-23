@@ -31,7 +31,7 @@ main: main.cpp tree.cc
 	${CC} main.cpp tree.cc ${CFLAGS}
 
 tree_wrapper: tree_wrapper.hpp tree_wrapper.cpp ${COMMON_DEPENDS}
-	${CC} -o libtree_wrapper.so ${CFLAGS} -ljemalloc -fPIC -shared tree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
+	${CC} -o libtree_wrapper.so ${CFLAGS} -NDEBUG -ljemalloc -fPIC -shared tree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
 # -----------------------------------------------------------------------------
 clean:
 	-rm -rf a.out core *.s ${TARGETS} libtree_wrapper.so

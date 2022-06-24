@@ -299,7 +299,14 @@ RetryInsert:
         LeafEntry* entries = leaf->ent;
         std::sort(sorted_pos, sorted_pos + LEAF_KEY_NUM, [entries](int i, int j){ return entries[i].key < entries[j].key; });
         int split_pos = LEAF_KEY_NUM / 2;
+    #ifdef STRING_KEY
         key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
+        char* sk = new char[split_key.length];
+        std::memcpy(sk, split_key.key, split_key.length);
+        split_key.key = sk;
+    #else
+        key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
+    #endif
         bool alt = leaf->alt();
 
         // alloc new leaf
@@ -359,11 +366,11 @@ RetryInsert:
                 current->insertChild(p, split_key, new_child);
                 split_key = new_inner->ent[0].key;
                 new_inner->count() = RIGHT_KEY_NUM;
-            #ifdef ADAPTIVE_PREFIX
-                current->adjustPrefix(p);
-                new_inner->prefix_offset() = cur_offset;
-                new_inner->adjustPrefix();
-            #endif
+                #ifdef ADAPTIVE_PREFIX
+                    current->adjustPrefix(p);
+                    new_inner->prefix_offset() = cur_offset;
+                    new_inner->adjustPrefix();
+                #endif
             }
             else
             {
@@ -375,11 +382,11 @@ RetryInsert:
                     new_inner->ent[r] = current->ent[i];
                 split_key = new_inner->ent[0].key;
                 new_inner->count() = RIGHT_KEY_NUM;
-            #ifdef ADAPTIVE_PREFIX
-                current->adjustPrefix();
-                new_inner->prefix_offset() = cur_offset;
-                new_inner->adjustPrefix(p);
-            #endif
+                #ifdef ADAPTIVE_PREFIX
+                    current->adjustPrefix();
+                    new_inner->prefix_offset() = cur_offset;
+                    new_inner->adjustPrefix(p);
+                #endif
             }
             new_child = new_inner;
             if (level < h) // do not unlock root

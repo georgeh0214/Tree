@@ -208,6 +208,7 @@ public:
 
     ~tree()
     {
+        printf("Tree height: %d \n", height);
         // delete (Leaf*)root; ToDo: 
     }
 

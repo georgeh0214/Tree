@@ -28,10 +28,10 @@ all: ${TARGETS}
 # lbtree: lbtree-src/lbtree.h lbtree-src/lbtree.cc ${COMMON_DEPENDS}
 # 	${CC} -o $@ ${CFLAGS} ${INCLUDE} lbtree-src/lbtree.cc ${COMMON_SOURCES} ${LIB}
 main: main.cpp tree.cc
-	${CC} main.cpp tree.cc ${CFLAGS}
+	${CC} -mavx512f -mavx512bw main.cpp tree.cc ${CFLAGS}
 
 tree_wrapper: tree_wrapper.hpp tree_wrapper.cpp ${COMMON_DEPENDS}
-	${CC} -o libtree_wrapper.so ${CFLAGS} -ljemalloc -fPIC -shared tree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
+	${CC} -o libtree_wrapper.so ${CFLAGS} -mavx512f -mavx512bw -ljemalloc -fPIC -shared tree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
 # -----------------------------------------------------------------------------
 clean:
 	-rm -rf a.out core *.s ${TARGETS} libtree_wrapper.so

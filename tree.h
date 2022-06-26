@@ -1,13 +1,23 @@
-#include <iostream>
-#include <algorithm>
-#include <cstring>
-#include <atomic>
-
 #include "bitmap.h"
 
 /*------------------------------------------------------------------------*/
 
 class Inner;
+class Leaf;
+
+#ifdef PM
+    #include <libpmemobj.h>
+    POBJ_LAYOUT_BEGIN(Tree);
+    POBJ_LAYOUT_TOID(Tree, class Leaf);
+    POBJ_LAYOUT_END(Tree);
+
+    PMEMobjpool * pop_;
+#endif
+
+#ifdef SIMD
+    #include <immintrin.h>
+#endif
+
 thread_local static Inner* anc_[MAX_HEIGHT];
 thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
@@ -157,37 +167,82 @@ public:
     uint8_t fp[LEAF_KEY_NUM];
 #endif
     LeafEntry ent[LEAF_KEY_NUM];
+#ifdef PM
+    PMEMoid next[2];
+#else
     Leaf* next[2]; // 16 byte
+#endif
 
-    Leaf() { next[0] = next[1] = nullptr; }
+    Leaf() 
+    { 
+    #ifdef PM
+        next[0] = next[1] = OID_NULL; 
+    #else
+        next[0] = next[1] = nullptr; 
+    #endif
+    }
     Leaf(const Leaf& leaf);
     ~Leaf();
 
     int count() { return bitmap.count(); }
-    Leaf* sibling() { return next[alt()]; }
+
+    Leaf* sibling() 
+    { 
+    #ifdef PM
+        return (Leaf*) pmemobj_direct(next[alt()]);
+    #else
+        return next[alt()]; 
+    #endif
+    }
+
     void insertEntry(key_type key, val_type val);
     int findKey(key_type key); // return position of key if found, -1 if not found
 } __attribute__((aligned(64)));
 
 static Inner* allocate_inner() { return new Inner; }
 
-static Leaf* allocate_leaf() { return new Leaf; }
+#ifdef PM
+    static Leaf* allocate_leaf(PMEMoid* oid) 
+    {
+        if (pmemobj_alloc(pop_, oid, sizeof(Leaf), 0, NULL, NULL) != 0)
+        {
+            printf("pmemobj_alloc\n");
+            exit(1);
+        }
+        return (Leaf*) pmemobj_direct(*oid);
+    }
+
+    static clwb(void* addr, uint32_t len)
+    {
+        pmemobj_flush(pop_, addr, len);
+    }
+
+    static sfence()
+    {
+        pmemobj_drain(pop_);
+    }
+#else
+    static Leaf* allocate_leaf() { return new Leaf; }
+#endif
 
 class tree
 {
 public:
     Node* root;
     int height; // leaf at level 0
-    Leaf* first_leaf;
 
+#ifdef PME
+    tree(const char* pool_path, uint64_t pool_size)
+#else
     tree()
+#endif
     {
         printf("Inner size:%d \n", sizeof(Inner));
         printf("Leaf size:%d \n", sizeof(Leaf));
     #ifdef Binary_Search
-        printf("Binary search.\n");
+        printf("Binary search inner.\n");
     #else
-        printf("Linear search.\n");
+        printf("Linear search inner.\n");
     #endif
     #ifdef FINGERPRINT
         printf("Fingerprint enabled.\n");
@@ -202,13 +257,39 @@ public:
         printf("Adaptive prefix enabled.\n");
     #endif
         height = 0;
+
+    #ifdef PM
+        struct stat buffer;
+        if (stat(pool_path, &buffer) == 0)
+        {
+            printf("Recovery not implemented!\n");
+            exit(1);
+        }
+        else
+        {
+            printf("Creating PMEM pool of size: %llu \n", pool_size);
+            pop_ = pmemobj_create(pool_path, POBJ_LAYOUT_NAME(Tree), size, 0666);
+            if (!pop_)
+            {
+                printf("pmemobj_create\n");
+                exit(1);
+            }
+            PMEMoid p = pmemobj_root(pop_, sizeof(Leaf));
+            root = new ((Leaf*)pmemobj_direct(p)) Leaf();
+            clwb(root, sizeof(Leaf))
+            sfence();
+        }
+    #else
         root = new (allocate_leaf()) Leaf();
-        first_leaf = (Leaf*)root;
+    #endif
     }
 
     ~tree()
     {
         printf("Tree height: %d \n", height);
+    #ifdef PM
+        pmemobj_close(pop_);
+    #endif
         // delete (Leaf*)root; ToDo: 
     }
 
@@ -224,7 +305,7 @@ public:
     // return true if entry with target key is found and val is set to new_val
     bool update(key_type key, val_type new_val);
 
-    // range scan with customized scan helper class
+    // range scan with customized scan helper
     void rangeScan(key_type start_key, ScanHelper& sh);
 
 private:

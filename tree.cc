@@ -7,7 +7,7 @@ int Inner::find(key_type key)
 #ifdef PREFIX
     #ifdef ADAPTIVE_PREFIX 
         int node_prefix_offset = this->prefix_offset();
-/*	int bytes_to_cmp = node_prefix_offset - key_prefix_offset_;
+/*	int bytes_to_cmp = node_prefix_offset - key_prefix_offset_; // less comparisons but more ifs, not faster...
 	if (node_prefix_offset == 0)
 	    common_prefix_ = false;
 	else if (!(common_prefix_ && bytes_to_cmp <= 0))
@@ -19,7 +19,7 @@ int Inner::find(key_type key)
 		common_prefix_ = true;
 	}
 */
-	int res = this->ent[1].key.compare(key, node_prefix_offset);
+        int res = this->ent[1].key.compare(key, node_prefix_offset);
         if (res != 0) // partial key before prefix do not match, either left most child or right most child
             return res < 0? this->count() : 0;
         if (key_prefix_offset_ != node_prefix_offset) // update search key prefix and offset if necessary
@@ -28,7 +28,7 @@ int Inner::find(key_type key)
             key_prefix_ = getPrefixWithOffset(key.key, key.length, key_prefix_offset_);
         }
     #endif
-    #ifdef Binary_Search // first ent[i].key >= key, return i-1, otherwise i
+    #ifdef Binary_Search
         int l = 1, mid; r = this->count();
         while (l <= r) {
             mid = (l + r) >> 1;
@@ -119,6 +119,22 @@ void Leaf::insertEntry(key_type key, val_type val)
 
 int Leaf::findKey(key_type key)
 {
+#if defined(FINGERPRINT) && defined(SIMD)
+    // a. set every byte to key_hash in a 64B register
+    __m512i key_64B = _mm512_set1_epi8((char)key_hash_);
+
+    // b. load fp into another 64B register
+    __m512i fgpt_64B = _mm512_loadu_si512(this->fp); // _mm512_loadu_si512, _mm512_load_si512 (64 align)
+
+    // c. compare them
+    __mmask64 mask = _mm512_cmpeq_epu8_mask(key_64B, fgpt_64B);
+
+    mask &= OFFSET; // in case LEAF_KEY_NUM < 64
+    mask &= this->bitmap.bits; // only check existing entries
+    for (int i = 0; mask; i++, mask >>= 1)
+        if ((mask & 1) && key == this->ent[i].key)
+            return i;
+#else
     uint64_t bits = this->bitmap.bits;
     for (int i = 0; bits != 0; i++) 
     {
@@ -130,6 +146,7 @@ int Leaf::findKey(key_type key)
             return i;
         bits = bits >> 1;
     }
+#endif
     return -1;
 }
 

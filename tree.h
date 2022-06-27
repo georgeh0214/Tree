@@ -168,7 +168,7 @@ public:
 #endif
     LeafEntry ent[LEAF_KEY_NUM];
 #ifdef PM
-    PMEMoid next[2];
+    PMEMoid next[2]; // 32 byte
 #else
     Leaf* next[2]; // 16 byte
 #endif
@@ -211,19 +211,23 @@ static Inner* allocate_inner() { return new Inner; }
         }
         return (Leaf*) pmemobj_direct(*oid);
     }
-
-    static clwb(void* addr, uint32_t len)
-    {
-        pmemobj_flush(pop_, addr, len);
-    }
-
-    static sfence()
-    {
-        pmemobj_drain(pop_);
-    }
 #else
     static Leaf* allocate_leaf() { return new Leaf; }
 #endif
+
+static clwb(void* addr, uint32_t len)
+{
+#ifdef PM
+    pmemobj_flush(pop_, addr, len);
+#endif
+}
+
+static sfence()
+{
+#ifdef PM
+    pmemobj_drain(pop_);
+#endif
+}
 
 class tree
 {
@@ -231,7 +235,7 @@ public:
     Node* root;
     int height; // leaf at level 0
 
-#ifdef PME
+#ifdef PM
     tree(const char* pool_path, uint64_t pool_size)
 #else
     tree()
@@ -268,7 +272,7 @@ public:
         else
         {
             printf("Creating PMEM pool of size: %llu \n", pool_size);
-            pop_ = pmemobj_create(pool_path, POBJ_LAYOUT_NAME(Tree), size, 0666);
+            pop_ = pmemobj_create(pool_path, POBJ_LAYOUT_NAME(Tree), pool_size, 0666);
             if (!pop_)
             {
                 printf("pmemobj_create\n");

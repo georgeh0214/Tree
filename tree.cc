@@ -111,10 +111,15 @@ void Leaf::insertEntry(key_type key, val_type val)
     int i = this->bitmap.first_zero();
     this->ent[i].key = key;
     this->ent[i].val = val;
+    clwb(&this->ent[i], sizeof(LeafEntry));
 #ifdef FINGERPRINT
     this->fp[i] = key_hash_;
+    clwb(&this->fp[i], sizeof(key_hash_));
 #endif
+    sfence();
     this->bitmap.set(i);
+    clwb(&this->bitmap, sizeof(Bitmap));
+    sfence();
 }
 
 int Leaf::findKey(key_type key)
@@ -281,7 +286,11 @@ bool tree::update(key_type key, val_type new_val)
 RetryUpdate:
     leaf = findLeaf(key, version, true);
     if ((i = leaf->findKey(key)) >= 0)
+    {
         leaf->ent[i].val = new_val;
+        clwb(&leaf->ent[i].val, sizeof(val_type));
+        sfence();
+    }
     leaf->unlock();
     return i >= 0;
 }
@@ -327,14 +336,21 @@ RetryInsert:
         bool alt = leaf->alt();
 
         // alloc new leaf
+    #ifdef PM
+        Leaf* new_leaf = new (allocate_leaf(&leaf->next[1 - alt])) Leaf(*leaf);
+    #else
         Leaf* new_leaf = new (allocate_leaf()) Leaf(*leaf);
         leaf->next[1 - alt] = new_leaf; // track in unused ptr
+    #endif
 
         // set bitmap of both leaves
         for (i = 0; i <= split_pos; i++)
             new_leaf->bitmap.reset(sorted_pos[i]);
+        clwb(new_leaf, sizeof(Leaf));
         leaf->bitmap.setBits(new_leaf->bitmap.bits);
         leaf->bitmap.flip();
+        clwb(&leaf->bitmap, sizeof(Bitmap));
+        sfence();
 
         // insert new entry, unlock leaf if not root
         if (key <= split_key) 

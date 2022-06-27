@@ -4,7 +4,7 @@
 #include <atomic>
 #include <sys/stat.h>
 
-#define INNER_KEY_NUM 256 // 512 if StringKey
+#define INNER_KEY_NUM 256
 #define LEAF_KEY_NUM 64 // <= 64 due to bitmap
 #define MAX_HEIGHT 32 // should be enough
 

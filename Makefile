@@ -10,7 +10,7 @@ override CFLAGS += -g -std=c++17 -pthread -O3 # -mrtm -msse4.1 -mavx2 -Wall -O3 
 #CFLAGS=-g -std=c++17 -pthread -msse4.1 -mavx2 -Wall -O3 -fsanitize=undefined,implicit-conversion,nullability,float-divide-by-zero,unsigned-integer-overflow,bounds,bool
 
 # INCLUDE=-I./common
-LIB=-lpmem -lpmemobj -ltbb
+LIB=-lpmemobj
 
 COMMON_DEPENDS= tree_api.hpp tree.h tree.cc 
 COMMON_SOURCES= tree.cc

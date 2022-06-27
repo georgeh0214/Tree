@@ -34,7 +34,7 @@ private:
 #else
   tree_wrapper::tree_wrapper()
   {
-    t_ = tree()
+    t_ = tree();
   }
 #endif
 

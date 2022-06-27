@@ -4,7 +4,7 @@
 #include <atomic>
 #include <sys/stat.h>
 
-#define INNER_KEY_NUM 256
+#define INNER_KEY_NUM 256 // 38 for integer keys, 256 for string keys
 #define LEAF_KEY_NUM 64 // <= 64 due to bitmap
 #define MAX_HEIGHT 32 // should be enough
 

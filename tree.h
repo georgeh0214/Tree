@@ -215,14 +215,14 @@ static Inner* allocate_inner() { return new Inner; }
     static Leaf* allocate_leaf() { return new Leaf; }
 #endif
 
-static clwb(void* addr, uint32_t len)
+static void clwb(void* addr, uint32_t len)
 {
 #ifdef PM
     pmemobj_flush(pop_, addr, len);
 #endif
 }
 
-static sfence()
+static void sfence()
 {
 #ifdef PM
     pmemobj_drain(pop_);

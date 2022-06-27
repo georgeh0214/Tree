@@ -8,7 +8,7 @@ class Leaf;
 #ifdef PM
     #include <libpmemobj.h>
     POBJ_LAYOUT_BEGIN(Tree);
-    POBJ_LAYOUT_TOID(Tree, class Leaf);
+    POBJ_LAYOUT_TOID(Tree, Leaf);
     POBJ_LAYOUT_END(Tree);
 
     PMEMobjpool * pop_;
@@ -235,11 +235,7 @@ public:
     Node* root;
     int height; // leaf at level 0
 
-#ifdef PM
-    tree(const char* pool_path, uint64_t pool_size)
-#else
     tree()
-#endif
     {
         printf("Inner size:%d \n", sizeof(Inner));
         printf("Leaf size:%d \n", sizeof(Leaf));
@@ -259,32 +255,6 @@ public:
     #endif
     #ifdef ADAPTIVE_PREFIX
         printf("Adaptive prefix enabled.\n");
-    #endif
-        height = 0;
-
-    #ifdef PM
-        struct stat buffer;
-        if (stat(pool_path, &buffer) == 0)
-        {
-            printf("Recovery not implemented!\n");
-            exit(1);
-        }
-        else
-        {
-            printf("Creating PMEM pool of size: %llu \n", pool_size);
-            pop_ = pmemobj_create(pool_path, POBJ_LAYOUT_NAME(Tree), pool_size, 0666);
-            if (!pop_)
-            {
-                printf("pmemobj_create\n");
-                exit(1);
-            }
-            PMEMoid p = pmemobj_root(pop_, sizeof(Leaf));
-            root = new ((Leaf*)pmemobj_direct(p)) Leaf();
-            clwb(root, sizeof(Leaf))
-            sfence();
-        }
-    #else
-        root = new (allocate_leaf()) Leaf();
     #endif
     }
 
@@ -311,6 +281,35 @@ public:
 
     // range scan with customized scan helper
     void rangeScan(key_type start_key, ScanHelper& sh);
+
+    void init(const char* pool_path, uint64_t pool_size)
+    {
+        height = 0;
+    #ifdef PM
+        struct stat buffer;
+        if (stat(pool_path, &buffer) == 0)
+        {
+            printf("Recovery not implemented!\n");
+            exit(1);
+        }
+        else
+        {
+            printf("Creating PMEM pool of size: %llu \n", pool_size);
+            pop_ = pmemobj_create(pool_path, POBJ_LAYOUT_NAME(Tree), pool_size, 0666);
+            if (!pop_)
+            {
+                printf("pmemobj_create\n");
+                exit(1);
+            }
+            PMEMoid p = pmemobj_root(pop_, sizeof(Leaf));
+            root = new ((Leaf*)pmemobj_direct(p)) Leaf();
+            clwb(root, sizeof(Leaf));
+            sfence();
+        }
+    #else
+        root = new (allocate_leaf()) Leaf();
+    #endif
+    }
 
 private:
     Leaf* findLeaf(key_type key, uint64_t& version, bool lock);

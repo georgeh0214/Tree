@@ -4,16 +4,13 @@
 #include <thread>
 #include <sys/types.h>
 
-// #define DEBUG_MSG
+extern size_t pool_size_;
+extern const char *pool_path_;
 
 class tree_wrapper : public tree_api
 {
 public:
-#ifdef PM
-  tree_wrapper(const char* pool_path, uint64_t pool_size);
-#else
   tree_wrapper();
-#endif
   virtual ~tree_wrapper();
 
   virtual bool find(const char *key, size_t key_sz, char *value_out) override;
@@ -26,17 +23,14 @@ private:
   tree t_;
 };
 
+tree_wrapper::tree_wrapper()
+{
 #ifdef PM
-  tree_wrapper::tree_wrapper(const char* pool_path, uint64_t pool_size)
-  {
-    t_ = tree(pool_path, pool_size);
-  }
+  t_.init(pool_path_, pool_size_);
 #else
-  tree_wrapper::tree_wrapper()
-  {
-    t_ = tree();
-  }
+  t_.init(0, 0);
 #endif
+}
 
 tree_wrapper::~tree_wrapper()
 {

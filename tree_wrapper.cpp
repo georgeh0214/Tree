@@ -15,6 +15,6 @@ extern "C" tree_api *create_tree(const tree_options_t &opt)
 
     if (opt.pool_size != 0)
     	pool_size_ = opt.pool_size;
-#else 
+#endif
 	return new tree_wrapper();
 }

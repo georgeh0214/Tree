@@ -11,7 +11,7 @@ class Leaf;
     POBJ_LAYOUT_TOID(Tree, Leaf);
     POBJ_LAYOUT_END(Tree);
 
-    PMEMobjpool * pop_;
+    extern PMEMobjpool * pop_;
 #endif
 
 #ifdef SIMD

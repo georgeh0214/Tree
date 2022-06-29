@@ -4,19 +4,19 @@
 #include <atomic>
 #include <sys/stat.h>
 
-#define INNER_KEY_NUM 256 // 38 for integer keys, 256 for string keys
+#define INNER_KEY_NUM 38 // 38 for integer keys, 256 for string keys
 #define LEAF_KEY_NUM 64 // <= 64 due to bitmap
 #define MAX_HEIGHT 32 // should be enough
 
-// #define PM
+#define PM
 
 #define FINGERPRINT
 #define SIMD // AVX512
 #define PREFETCH
 #define BRANCH_PRED
 #define EARLY_SPLIT 2
-#define Binary_Search // only faster with STRING_KEY
-#define STRING_KEY 
+//#define Binary_Search // only faster with STRING_KEY
+//#define STRING_KEY 
 
 #ifdef STRING_KEY // change length type if necessary
     #define ALLOC_KEY

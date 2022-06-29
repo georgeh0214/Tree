@@ -1,5 +1,7 @@
 #include "tree.h"
 
+PMEMobjpool * pop_;
+
 // Inner
 int Inner::find(key_type key)
 {

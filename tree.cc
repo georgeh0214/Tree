@@ -1,7 +1,9 @@
 #include "tree.h"
 
-PMEMobjpool * pop_;
-uint64_t class_id = 0;
+#ifdef PM
+    PMEMobjpool * pop_;
+    uint64_t class_id = 0;
+#endif
 
 // Inner
 int Inner::find(key_type key)
@@ -201,7 +203,7 @@ RetryFindLeaf:
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
-    // #ifdef PREFETCH
+    // #ifdef PREFETCH // minor degradation
     //     prefetchInner(current);
     // #endif
         previous = (Inner*)current;
@@ -211,8 +213,8 @@ RetryFindLeaf:
             goto RetryFindLeaf;
     }
     leaf = (Leaf*)current;
-    // #ifdef PREFETCH // not working!
-    //     prefetchLeaf(current);
+    // #ifdef PREFETCH // significant decline
+    //     prefetchLeaf(leaf);
     // #endif
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
@@ -236,9 +238,9 @@ RetryFindLeafAssumeSplit:
     pos_[0] = this->height;
     for (i = pos_[0]; i > 0; i--)
     {
-    #ifdef PREFETCH
-        prefetchInner(current);
-    #endif
+    // #ifdef PREFETCH // minor degradation
+    //     prefetchInner(current);
+    // #endif
         anc_[i] = (Inner*)current;
         versions_[i] = currentVersion;
         previous = current;
@@ -250,8 +252,8 @@ RetryFindLeafAssumeSplit:
             goto RetryFindLeafAssumeSplit;
     }
     leaf = (Leaf*)current;
-    #ifdef PREFETCH // not working!
-        prefetchLeaf(current);
+    #ifdef PREFETCH // improve by a little
+        prefetchLeaf(leaf);
     #endif
     if (leaf->findKey(key) >= 0) // key already exists
     {

@@ -208,7 +208,7 @@ static Inner* allocate_inner() { return new Inner; }
     #ifdef ALIGNED_ALLOC
         thread_local pobj_action act;
         // auto x = POBJ_XRESERVE_NEW(pop, dummy, &act, POBJ_CLASS_ID(class_id));
-        *oid =  pmemobj_reserve(pop_, &act, sizeof(Leaf), class_id);
+        *oid =  pmemobj_xreserve(pop_, &act, sizeof(Leaf), 0, class_id);
         // D_RW(x)->arr[0] = NULL;
         // D_RW(x)->arr[31] = NULL;
         // (((unsigned long long)(D_RW(x)->arr)) & (~(unsigned long long)(64 - 1)));

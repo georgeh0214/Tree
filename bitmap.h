@@ -5,14 +5,15 @@
 #include <sys/stat.h>
 
 #define INNER_KEY_NUM 38 // 38 for integer keys, 256 for string keys
-#define LEAF_KEY_NUM 64 // <= 64 due to bitmap
+#define LEAF_KEY_NUM 13 // <= 64 due to bitmap, 13 if PM without FINGERPRINT
 #define MAX_HEIGHT 32 // should be enough
 
 #define PM
 #define ALIGNED_ALLOC // allocate by 256 blocks
+#define NEW_PERSIST // asm volatile
 
-#define FINGERPRINT
-#define SIMD // AVX512
+//#define FINGERPRINT
+//#define SIMD // AVX512
 #define PREFETCH
 #define BRANCH_PRED
 #define EARLY_SPLIT 2

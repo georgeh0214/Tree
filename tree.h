@@ -234,14 +234,25 @@ static Inner* allocate_inner() { return new Inner; }
 static void clwb(void* addr, uint32_t len)
 {
 #ifdef PM
-    pmemobj_flush(pop_, addr, len);
+    #ifdef NEW_PERSIST
+        for (uint32_t i = 0; i < len; i += 64, addr += 8)
+            asm volatile("clwb %0"
+                   :
+                   : "m"(*((char *)addr)));
+    #else
+        pmemobj_flush(pop_, addr, len);
+    #endif
 #endif
 }
 
 static void sfence()
 {
 #ifdef PM
-    pmemobj_drain(pop_);
+    #ifdef NEW_PERSIST
+        asm volatile("sfence");
+    #else
+        pmemobj_drain(pop_);
+    #endif
 #endif
 }
 

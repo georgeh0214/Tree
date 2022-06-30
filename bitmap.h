@@ -9,6 +9,7 @@
 #define MAX_HEIGHT 32 // should be enough
 
 #define PM
+#define ALIGNED_ALLOC // allocate by 256 blocks
 
 #define FINGERPRINT
 #define SIMD // AVX512

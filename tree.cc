@@ -1,6 +1,7 @@
 #include "tree.h"
 
 PMEMobjpool * pop_;
+uint64_t class_id = 0;
 
 // Inner
 int Inner::find(key_type key)

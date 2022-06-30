@@ -12,6 +12,7 @@ class Leaf;
     POBJ_LAYOUT_END(Tree);
 
     extern PMEMobjpool * pop_;
+    extern uint64_t class_id;
 #endif
 
 #ifdef SIMD
@@ -197,18 +198,33 @@ public:
 
     void insertEntry(key_type key, val_type val);
     int findKey(key_type key); // return position of key if found, -1 if not found
-} __attribute__((aligned(64)));
+} __attribute__((aligned(256)));
 
 static Inner* allocate_inner() { return new Inner; }
 
 #ifdef PM
     static Leaf* allocate_leaf(PMEMoid* oid) 
     {
+    #ifdef ALIGNED_ALLOC
+        thread_local pobj_action act;
+        // auto x = POBJ_XRESERVE_NEW(pop, dummy, &act, POBJ_CLASS_ID(class_id));
+        *oid =  pmemobj_reserve(pop_, &act, sizeof(Leaf), class_id);
+        // D_RW(x)->arr[0] = NULL;
+        // D_RW(x)->arr[31] = NULL;
+        // (((unsigned long long)(D_RW(x)->arr)) & (~(unsigned long long)(64 - 1)));
+        // (((unsigned long long)(D_RW(x)->arr+32)) & (~(unsigned long long)(64 - 1)));
+        if (((unsigned long long)pmemobj_direct(*oid)) % 256 != 0)
+        {
+            printf("leaf(%p): not aligned at 256B\n", pmemobj_direct(*oid));
+            exit(1);
+        }
+    #else
         if (pmemobj_alloc(pop_, oid, sizeof(Leaf), 0, NULL, NULL) != 0)
         {
             printf("pmemobj_alloc\n");
             exit(1);
         }
+    #endif
         return (Leaf*) pmemobj_direct(*oid);
     }
 #else
@@ -301,6 +317,19 @@ public:
                 printf("pmemobj_create\n");
                 exit(1);
             }
+            #ifdef ALIGNED_ALLOC
+                pobj_alloc_class_desc arg;
+                arg.unit_size = sizeof(Leaf);
+                arg.alignment = 256;
+                arg.units_per_block = 16;
+                arg.header_type = POBJ_HEADER_NONE;
+                if (pmemobj_ctl_set(pop_, "heap.alloc_class.new.desc", &arg) != 0)
+                {
+                    printf("Allocation class initialization failed!\n");
+                    exit(1);
+                }
+                class_id = arg.class_id;
+            #endif
             PMEMoid p = pmemobj_root(pop_, sizeof(Leaf));
             root = new ((Leaf*)pmemobj_direct(p)) Leaf();
             clwb(root, sizeof(Leaf));

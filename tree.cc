@@ -112,14 +112,22 @@ Leaf::Leaf(const Leaf& leaf)
 void Leaf::insertEntry(key_type key, val_type val)
 {
     int i = this->bitmap.first_zero();
-    this->ent[i].key = key;
-    this->ent[i].val = val;
-    clwb(&this->ent[i], sizeof(LeafEntry));
 #ifdef FINGERPRINT
     this->fp[i] = key_hash_;
     clwb(&this->fp[i], sizeof(key_hash_));
 #endif
+    this->ent[i].key = key;
+    this->ent[i].val = val;
+#if LEAF_KEY_NUM == 13
+    if (i >= 3) // if not in same cacheline as bitmap
+    {
+        clwb(&this->ent[i], sizeof(LeafEntry));
+        sfence();
+    }
+#else
+    clwb(&this->ent[i], sizeof(LeafEntry));
     sfence();
+#endif
     this->bitmap.set(i);
     clwb(&this->bitmap, sizeof(Bitmap));
     sfence();

@@ -213,11 +213,11 @@ static Inner* allocate_inner() { return new Inner; }
         // D_RW(x)->arr[31] = NULL;
         // (((unsigned long long)(D_RW(x)->arr)) & (~(unsigned long long)(64 - 1)));
         // (((unsigned long long)(D_RW(x)->arr+32)) & (~(unsigned long long)(64 - 1)));
-        if (((unsigned long long)pmemobj_direct(*oid)) % 256 != 0)
-        {
-            printf("leaf(%p): not aligned at 256B\n", pmemobj_direct(*oid));
-            exit(1);
-        }
+        // if (((unsigned long long)pmemobj_direct(*oid)) % 256 != 0)
+        // {
+        //     printf("leaf(%p): not aligned at 256B\n", pmemobj_direct(*oid));
+        //     exit(1);
+        // }
     #else
         if (pmemobj_alloc(pop_, oid, sizeof(Leaf), 0, NULL, NULL) != 0)
         {
@@ -321,7 +321,7 @@ public:
                 pobj_alloc_class_desc arg;
                 arg.unit_size = sizeof(Leaf);
                 arg.alignment = 256;
-                // arg.units_per_block = 16;
+                arg.units_per_block = 16;
                 arg.header_type = POBJ_HEADER_NONE;
                 if (pmemobj_ctl_set(pop_, "heap.alloc_class.new.desc", &arg) != 0)
                 {

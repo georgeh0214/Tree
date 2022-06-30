@@ -201,9 +201,9 @@ RetryFindLeaf:
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
-    #ifdef PREFETCH
-        prefetchInner(current);
-    #endif
+    // #ifdef PREFETCH
+    //     prefetchInner(current);
+    // #endif
         previous = (Inner*)current;
         previousVersion = currentVersion;
         current = ((Inner*)current)->findChild(key);
@@ -211,9 +211,9 @@ RetryFindLeaf:
             goto RetryFindLeaf;
     }
     leaf = (Leaf*)current;
-    #ifdef PREFETCH
-        prefetchLeaf(current);
-    #endif
+    // #ifdef PREFETCH // not working!
+    //     prefetchLeaf(current);
+    // #endif
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
     version = currentVersion;
@@ -236,6 +236,9 @@ RetryFindLeafAssumeSplit:
     pos_[0] = this->height;
     for (i = pos_[0]; i > 0; i--)
     {
+    #ifdef PREFETCH
+        prefetchInner(current);
+    #endif
         anc_[i] = (Inner*)current;
         versions_[i] = currentVersion;
         previous = current;
@@ -247,6 +250,9 @@ RetryFindLeafAssumeSplit:
             goto RetryFindLeafAssumeSplit;
     }
     leaf = (Leaf*)current;
+    #ifdef PREFETCH // not working!
+        prefetchLeaf(current);
+    #endif
     if (leaf->findKey(key) >= 0) // key already exists
     {
         if (leaf->checkVersion(currentVersion))

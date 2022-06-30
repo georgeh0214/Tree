@@ -118,8 +118,8 @@ void Leaf::insertEntry(key_type key, val_type val)
 #endif
     this->ent[i].key = key;
     this->ent[i].val = val;
-#if LEAF_KEY_NUM == 13
-    if (i >= 3) // if not in same cacheline as bitmap
+#if LEAF_KEY_NUM == 13 // assuming no fingerprint and 8B key/value
+    if (i >= 3) // if not in the first cacheline
     {
         clwb(&this->ent[i], sizeof(LeafEntry));
         sfence();
@@ -201,6 +201,9 @@ RetryFindLeaf:
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
+    #ifdef PREFETCH
+        prefetchInner(current);
+    #endif
         previous = (Inner*)current;
         previousVersion = currentVersion;
         current = ((Inner*)current)->findChild(key);
@@ -208,6 +211,9 @@ RetryFindLeaf:
             goto RetryFindLeaf;
     }
     leaf = (Leaf*)current;
+    #ifdef PREFETCH
+        prefetchLeaf(current);
+    #endif
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
     version = currentVersion;

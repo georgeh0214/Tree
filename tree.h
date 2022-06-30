@@ -256,6 +256,24 @@ static void sfence()
 #endif
 }
 
+static void prefetchInner(void* addr)
+{
+#define INNER_LINE_NUM sizeof(Inner) / 64 
+    for (int i = 0; i < INNER_LINE_NUM; i++, addr += 64)
+        __asm__ __volatile__("prefetcht0 %0" \
+                      :               \
+                      : "m"(*((char *)addr)))
+}
+
+static void prefetchLeaf(void* addr)
+{
+#define LEAF_LINE_NUM sizeof(Leaf) / 64
+    for (int i = 0; i < INNER_LINE_NUM; i++, addr += 64)
+        __asm__ __volatile__("prefetcht0 %0" \
+                      :               \
+                      : "m"(*((char *)addr)))
+}
+
 class tree
 {
 public:

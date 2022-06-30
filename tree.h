@@ -208,7 +208,7 @@ static Inner* allocate_inner() { return new Inner; }
     #ifdef ALIGNED_ALLOC
         thread_local pobj_action act;
         // auto x = POBJ_XRESERVE_NEW(pop, dummy, &act, POBJ_CLASS_ID(class_id));
-        *oid =  pmemobj_xreserve(pop_, &act, sizeof(Leaf), 0, class_id);
+        *oid = pmemobj_xreserve(pop_, &act, sizeof(Leaf), 0, POBJ_CLASS_ID(class_id));
         // D_RW(x)->arr[0] = NULL;
         // D_RW(x)->arr[31] = NULL;
         // (((unsigned long long)(D_RW(x)->arr)) & (~(unsigned long long)(64 - 1)));
@@ -321,7 +321,7 @@ public:
                 pobj_alloc_class_desc arg;
                 arg.unit_size = sizeof(Leaf);
                 arg.alignment = 256;
-                arg.units_per_block = 16;
+                // arg.units_per_block = 16;
                 arg.header_type = POBJ_HEADER_NONE;
                 if (pmemobj_ctl_set(pop_, "heap.alloc_class.new.desc", &arg) != 0)
                 {
@@ -338,6 +338,7 @@ public:
     #else
         root = new (allocate_leaf()) Leaf();
     #endif
+        printf("initialization Complete.\n");
     }
 
 private:

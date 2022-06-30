@@ -235,7 +235,7 @@ static void clwb(void* addr, uint32_t len)
 {
 #ifdef PM
     #ifdef NEW_PERSIST
-        for (uint32_t i = 0; i < len; i += 64, addr += 8)
+        for (uint32_t i = 0; i < len; i += 64, addr += 64)
             asm volatile("clwb %0"
                    :
                    : "m"(*((char *)addr)));

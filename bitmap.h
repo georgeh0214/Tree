@@ -137,6 +137,21 @@
         inline bool operator>=(const StringKey &other) { return compare(other) >= 0; }
     };
 
+    inline int compare(void* k1, void* k2, uint16_t len1, uint16_t len2)
+    {
+        int res;
+        if (len1 < len2)
+        {
+            res = std::memcmp(k1, k2, len1);
+            return res? res : -1;
+        }
+        else
+        {
+            res = std::memcmp(k1, k2, len2);
+            return res? res : len1 == len2? 0 : 1;
+        }
+    }
+
     typedef StringKey key_type;
 #else
     typedef uint64_t key_type; // ADAPTIVE_PREFIX: key type >= 8 bytes, otherwise >= 4. count is stored in first key of inner

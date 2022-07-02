@@ -72,7 +72,7 @@ public:
 inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
 {
 #if defined(PM) && defined(STRING_KEY)
-    return compare(pmemobj_direct(a.key), a.len, pmemobj_direct(b.key), b.len) < 0;
+    return compare(pmemobj_direct(a.key), pmemobj_direct(b.key), a.len, b.len) < 0;
 #else
     return a.key < b.key;
 #endif

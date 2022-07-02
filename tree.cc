@@ -369,7 +369,7 @@ RetryInsert:
         LeafEntry* entries = leaf->ent;
         std::sort(sorted_pos, sorted_pos + LEAF_KEY_NUM, [entries](int i, int j){
         #if defined(PM) && defined(STRING_KEY)
-            return compare(pmemobj_direct(entries[i].key), pmemobj_direct(entries[j].key), entries[i].len, entries[j].len);
+            return compare(pmemobj_direct(entries[i].key), pmemobj_direct(entries[j].key), entries[i].len, entries[j].len) < 0;
         #else
             return entries[i].key < entries[j].key; 
         #endif

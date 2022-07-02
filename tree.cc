@@ -377,7 +377,7 @@ RetryInsert:
         int split_pos = LEAF_KEY_NUM / 2;
     #ifdef STRING_KEY
         #ifdef PM
-            key_type split_key = StringKey(pmemobj_direct(leaf->ent[sorted_pos[split_pos]].key), leaf->ent[sorted_pos[split_pos]].len);
+            key_type split_key = StringKey((char*)pmemobj_direct(leaf->ent[sorted_pos[split_pos]].key), leaf->ent[sorted_pos[split_pos]].len);
         #else
             key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
         #endif
@@ -386,9 +386,6 @@ RetryInsert:
         split_key.key = sk;
     #else
         key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
-        char* sk = new char[split_key.length];
-        std::memcpy(sk, split_key.key, split_key.length);
-        split_key.key = sk;
     #endif
         bool alt = leaf->alt();
 

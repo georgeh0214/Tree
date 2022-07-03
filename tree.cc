@@ -118,7 +118,15 @@ void Leaf::insertEntry(key_type key, val_type val)
     this->fp[i] = key_hash_;
     clwb(&this->fp[i], sizeof(key_hash_));
 #endif
+
+#if defined(PM) && defined(STRING_KEY)
+    void* key_addr = allocate_size(&this->ent[i].key, key.length);
+    std::memcpy(key_addr, key.key, key.length);
+    clwb(key_addr, key.length);
+    this->ent[i].len = key.length;
+#else
     this->ent[i].key = key;
+#endif
     this->ent[i].val = val;
 #if LEAF_KEY_NUM == 13 // assuming no fingerprint and 8B key/value
     if (i >= 3) // if not in the first cacheline
@@ -150,16 +158,28 @@ int Leaf::findKey(key_type key)
     mask &= OFFSET; // in case LEAF_KEY_NUM < 64
     mask &= this->bitmap.bits; // only check existing entries
     for (int i = 0; mask; i++, mask >>= 1)
+    #if defined(PM) && defined(STRING_KEY)
+        if ((mask & 1) && compare(key.key, pmemobj_direct(this->ent[i].key), key.length, this->ent[i].len) == 0)
+    #else
         if ((mask & 1) && key == this->ent[i].key)
+    #endif
             return i;
 #else
     uint64_t bits = this->bitmap.bits;
     for (int i = 0; bits != 0; i++) 
     {
     #ifdef FINGERPRINT
-        if ((bits & 1) && key_hash_ == this->fp[i] && key == this->ent[i].key) // key found
+        #if defined(PM) && defined(STRING_KEY)
+            if ((bits & 1) && key_hash_ == this->fp[i] && compare(key.key, pmemobj_direct(this->ent[i].key), key.length, this->ent[i].len) == 0) // key found
+        #else
+            if ((bits & 1) && key_hash_ == this->fp[i] && key == this->ent[i].key) // key found
+        #endif
     #else
-        if ((bits & 1) && key == this->ent[i].key) // key found
+        #if defined(PM) && defined(STRING_KEY)
+            if ((bits & 1) && compare(key.key, pmemobj_direct(this->ent[i].key), key.length, this->ent[i].len) == 0) // key found
+        #else
+            if ((bits & 1) && key == this->ent[i].key) // key found
+        #endif
     #endif
             return i;
         bits = bits >> 1;
@@ -348,10 +368,20 @@ RetryInsert:
         for (i = 0; i < LEAF_KEY_NUM; i++)
             sorted_pos[i] = i;
         LeafEntry* entries = leaf->ent;
-        std::sort(sorted_pos, sorted_pos + LEAF_KEY_NUM, [entries](int i, int j){ return entries[i].key < entries[j].key; });
+        std::sort(sorted_pos, sorted_pos + LEAF_KEY_NUM, [entries](int i, int j){
+        #if defined(PM) && defined(STRING_KEY)
+            return compare(pmemobj_direct(entries[i].key), pmemobj_direct(entries[j].key), entries[i].len, entries[j].len) < 0;
+        #else
+            return entries[i].key < entries[j].key; 
+        #endif
+        });
         int split_pos = LEAF_KEY_NUM / 2;
     #ifdef STRING_KEY
-        key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
+        #ifdef PM
+            key_type split_key = StringKey((char*)pmemobj_direct(leaf->ent[sorted_pos[split_pos]].key), leaf->ent[sorted_pos[split_pos]].len);
+        #else
+            key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
+        #endif
         char* sk = new char[split_key.length];
         std::memcpy(sk, split_key.key, split_key.length);
         split_key.key = sk;
@@ -483,41 +513,41 @@ void tree::rangeScan(key_type start_key, ScanHelper& sh)
 
     initOp(start_key);
 
-RetryScan:
-    sh.reset();
-    resetPrefix(start_key);
-    leaf = findLeaf(start_key, leaf_version, false);
-    bits = leaf->bitmap.bits;
-    for (int i = 0; bits != 0; i++, bits = bits >> 1)
-        if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
-            sh.scanEntry(leaf->ent[i]);
-    next_leaf = leaf->sibling();
-    if (!next_leaf)
-    {
-	if (!leaf->checkVersion(leaf_version))
-	    goto RetryScan;
-	return;
-    }
-    if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-        goto RetryScan;
-    leaf = next_leaf;
-    leaf_version = next_version;
-    do {
-        bits = leaf->bitmap.bits;
-        for (int i = 0; bits != 0; i++, bits = bits >> 1) 
-            if (bits & 1) // entry found
-                sh.scanEntry(leaf->ent[i]);
-        next_leaf = leaf->sibling();
-	if (!next_leaf)
-        { 
-            if (!leaf->checkVersion(leaf_version))
-                goto RetryScan;
-            return;
-        }
-        if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-            goto RetryScan;
-        leaf = next_leaf;
-        leaf_version = next_version;
-    } while (!sh.stop());
+// RetryScan:
+//     sh.reset();
+//     resetPrefix(start_key);
+//     leaf = findLeaf(start_key, leaf_version, false);
+//     bits = leaf->bitmap.bits;
+//     for (int i = 0; bits != 0; i++, bits = bits >> 1)
+//         if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
+//             sh.scanEntry(leaf->ent[i]);
+//     next_leaf = leaf->sibling();
+//     if (!next_leaf)
+//     {
+// 	if (!leaf->checkVersion(leaf_version))
+// 	    goto RetryScan;
+// 	return;
+//     }
+//     if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+//         goto RetryScan;
+//     leaf = next_leaf;
+//     leaf_version = next_version;
+//     do {
+//         bits = leaf->bitmap.bits;
+//         for (int i = 0; bits != 0; i++, bits = bits >> 1) 
+//             if (bits & 1) // entry found
+//                 sh.scanEntry(leaf->ent[i]);
+//         next_leaf = leaf->sibling();
+// 	if (!next_leaf)
+//         { 
+//             if (!leaf->checkVersion(leaf_version))
+//                 goto RetryScan;
+//             return;
+//         }
+//         if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+//             goto RetryScan;
+//         leaf = next_leaf;
+//         leaf_version = next_version;
+//     } while (!sh.stop());
 }
 

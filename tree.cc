@@ -3,7 +3,7 @@
 #ifdef PM
     PMEMobjpool * pop_;
     uint64_t class_id = 0;
-    PMEMoid key_;
+    thread_local PMEMoid string_key_;
 #endif
 
 // Inner
@@ -125,7 +125,7 @@ void Leaf::insertEntry(key_type key, val_type val)
     // void* key_addr = allocate_size(&this->ent[i].key, key.length);
     // std::memcpy(key_addr, key.key, key.length);
     // clwb(key_addr, key.length);
-    this->ent[i].key = key_;
+    this->ent[i].key = string_key_;
     this->ent[i].len = key.length;
 #else
     this->ent[i].key = key;

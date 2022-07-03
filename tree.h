@@ -14,7 +14,7 @@ class Leaf;
 
     extern PMEMobjpool * pop_;
     extern uint64_t class_id;
-    extern PMEMoid key_;
+    extern thread_local PMEMoid string_key_;
 #endif
 
 #ifdef SIMD

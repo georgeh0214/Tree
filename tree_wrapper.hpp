@@ -6,6 +6,7 @@
 
 extern size_t pool_size_;
 extern const char *pool_path_;
+extern thread_local PMEMoid string_key_;
 
 class tree_wrapper : public tree_api
 {
@@ -61,7 +62,7 @@ bool tree_wrapper::insert(const char *key, size_t key_sz, const char *value, siz
     key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
   #endif
   #ifdef PM
-    void* key_addr = allocate_size(&key_, key_sz);
+    void* key_addr = allocate_size(&string_key_, key_sz);
     std::memcpy(key_addr, key, key_sz);
     clwb(key_addr, key_sz);
   #endif

@@ -60,6 +60,11 @@ bool tree_wrapper::insert(const char *key, size_t key_sz, const char *value, siz
   #else
     key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
   #endif
+  #ifdef PM
+    void* key_addr = allocate_size(&key_, key_sz);
+    std::memcpy(key_addr, key, key_sz);
+    clwb(key_addr, key_sz);
+  #endif
   return t_.insert(k, reinterpret_cast<val_type>(const_cast<char*>(value)));
 #else
   return t_.insert(*reinterpret_cast<key_type*>(const_cast<char*>(key)), 

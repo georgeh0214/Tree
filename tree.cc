@@ -120,8 +120,9 @@ void Leaf::insertEntry(key_type key, val_type val)
 #endif
 
 #if defined(PM) && defined(STRING_KEY)
-    allocate_size(&this->ent[i].key, key.length);
-    std::memcpy(pmemobj_direct(this->ent[i].key), key.key, key.length);
+    void* key_addr = allocate_size(&this->ent[i].key, key.length);
+    std::memcpy(key_addr, key.key, key.length);
+    clwb(key_addr, key.length);
     this->ent[i].len = key.length;
 #else
     this->ent[i].key = key;

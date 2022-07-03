@@ -9,6 +9,7 @@ class Leaf;
     #include <libpmemobj.h>
     POBJ_LAYOUT_BEGIN(Tree);
     POBJ_LAYOUT_TOID(Tree, Leaf);
+    POBJ_LAYOUT_TOID(Tree, char);
     POBJ_LAYOUT_END(Tree);
 
     extern PMEMobjpool * pop_;
@@ -239,16 +240,8 @@ static Inner* allocate_inner() { return new Inner; }
 
     static void* allocate_size(PMEMoid* oid, uint32_t size) 
     {
-    // #ifdef ALIGNED_ALLOC
-    //     thread_local pobj_action act;
-    //     *oid = pmemobj_xreserve(pop_, &act, size, 0, POBJ_CLASS_ID(class_id));
-    // #else
-        if (pmemobj_alloc(pop_, oid, size, 0, NULL, NULL) != 0)
-        {
-            printf("pmemobj_alloc\n");
-            exit(1);
-        }
-    // #endif
+        thread_local pobj_action act;
+        *oid = pmemobj_reserve(pop_, &act, size, 1);
         return pmemobj_direct(*oid);
     }
 #else
@@ -374,7 +367,7 @@ public:
                 pobj_alloc_class_desc arg;
                 arg.unit_size = sizeof(Leaf);
                 arg.alignment = 256;
-                arg.units_per_block = 16;
+                arg.units_per_block = 4096;
                 arg.header_type = POBJ_HEADER_NONE;
                 if (pmemobj_ctl_set(pop_, "heap.alloc_class.new.desc", &arg) != 0)
                 {

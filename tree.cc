@@ -148,7 +148,7 @@ void Leaf::insertEntry(key_type key, val_type val)
 
 int Leaf::findKey(key_type key)
 {
-#if defined(FINGERPRINT) && defined(SIMD)
+#if defined(FINGERPRINT) && defined(SIMD) // AVX512
     // a. set every byte to key_hash in a 64B register
     __m512i key_64B = _mm512_set1_epi8((char)key_hash_);
 
@@ -275,9 +275,9 @@ RetryFindLeafAssumeSplit:
             goto RetryFindLeafAssumeSplit;
     }
     leaf = (Leaf*)current;
-    #ifdef PREFETCH // improve by a little
-        prefetchLeaf(leaf);
-    #endif
+    // #ifdef PREFETCH // improve by a little
+    //     prefetchLeaf(leaf);
+    // #endif
     if (leaf->findKey(key) >= 0) // key already exists
     {
         if (leaf->checkVersion(currentVersion))
@@ -516,41 +516,35 @@ void tree::rangeScan(key_type start_key, ScanHelper& sh)
 
     initOp(start_key);
 
-// RetryScan:
-//     sh.reset();
-//     resetPrefix(start_key);
-//     leaf = findLeaf(start_key, leaf_version, false);
-//     bits = leaf->bitmap.bits;
-//     for (int i = 0; bits != 0; i++, bits = bits >> 1)
-//         if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
-//             sh.scanEntry(leaf->ent[i]);
-//     next_leaf = leaf->sibling();
-//     if (!next_leaf)
-//     {
-// 	if (!leaf->checkVersion(leaf_version))
-// 	    goto RetryScan;
-// 	return;
-//     }
-//     if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-//         goto RetryScan;
-//     leaf = next_leaf;
-//     leaf_version = next_version;
-//     do {
-//         bits = leaf->bitmap.bits;
-//         for (int i = 0; bits != 0; i++, bits = bits >> 1) 
-//             if (bits & 1) // entry found
-//                 sh.scanEntry(leaf->ent[i]);
-//         next_leaf = leaf->sibling();
-// 	if (!next_leaf)
-//         { 
-//             if (!leaf->checkVersion(leaf_version))
-//                 goto RetryScan;
-//             return;
-//         }
-//         if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-//             goto RetryScan;
-//         leaf = next_leaf;
-//         leaf_version = next_version;
-//     } while (!sh.stop());
+RetryScan:
+    sh.reset();
+    leaf = findLeaf(start_key, leaf_version, false);
+    bits = leaf->bitmap.bits;
+    for (int i = 0; bits != 0; i++, bits = bits >> 1)
+    #if defined(PM) && defined(STRING_KEY)
+        if ((bits & 1) && compare((char*)pmemobj_direct(leaf->ent[i].key), start_key.key, this->ent[i].len, start_key.length) >= 0)
+    #else
+        if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
+    #endif
+            sh.scanEntry(leaf->ent[i]);
+
+    while(!sh.stop())
+    {
+        next_leaf = leaf->sibling();
+        if (!next_leaf) // end of leaves
+        {
+            if (!leaf->checkVersion(leaf_version))
+                goto RetryScan;
+            return;
+        }
+        if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+            goto RetryScan;
+        leaf = next_leaf;
+        leaf_version = next_version;
+        bits = leaf->bitmap.bits;
+        for (i = 0; bits != 0; i++, bits = bits >> 1) 
+            if (bits & 1) // entry found
+                sh.scanEntry(leaf->ent[i]);
+    }
 }
 

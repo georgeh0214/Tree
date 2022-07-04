@@ -14,7 +14,7 @@
 
 //#define FINGERPRINT
 //#define SIMD // AVX512
-#define PREFETCH
+#define PREFETCH // not effective
 #define BRANCH_PRED
 #define EARLY_SPLIT 2
 //#define Binary_Search // only faster with STRING_KEY

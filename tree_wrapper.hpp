@@ -4,9 +4,11 @@
 #include <thread>
 #include <sys/types.h>
 
-extern size_t pool_size_;
-extern const char *pool_path_;
-extern thread_local PMEMoid string_key_;
+#ifdef PM
+  extern size_t pool_size_;
+  extern const char *pool_path_;
+  extern thread_local PMEMoid string_key_;
+#endif
 
 class tree_wrapper : public tree_api
 {

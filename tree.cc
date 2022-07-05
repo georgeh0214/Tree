@@ -522,7 +522,7 @@ RetryScan:
     bits = leaf->bitmap.bits;
     for (int i = 0; bits != 0; i++, bits = bits >> 1)
     #if defined(PM) && defined(STRING_KEY)
-        if ((bits & 1) && compare((char*)pmemobj_direct(leaf->ent[i].key), start_key.key, this->ent[i].len, start_key.length) >= 0)
+        if ((bits & 1) && compare((char*)pmemobj_direct(leaf->ent[i].key), start_key.key, leaf->ent[i].len, start_key.length) >= 0)
     #else
         if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
     #endif

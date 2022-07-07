@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 
 #define INNER_KEY_NUM 38 // 38 for integer keys, 256 for string keys
-#define LEAF_KEY_NUM 13 // <= 64 due to bitmap, 13 if PM without FINGERPRINT
+#define LEAF_KEY_NUM 64 // <= 64 due to bitmap, 13 if PM without FINGERPRINT
 #define MAX_HEIGHT 32 // should be enough
 
 #define PM
@@ -19,6 +19,7 @@
 #define EARLY_SPLIT 2
 //#define Binary_Search // only faster with STRING_KEY
 //#define STRING_KEY 
+#define LONG_KEY
 
 #ifdef STRING_KEY // change length type if necessary
     #define ALLOC_KEY
@@ -153,6 +154,19 @@
     }
 
     typedef StringKey key_type;
+#elif defined(LONG_KEY)
+    #define MAX_KEY_LEN 26
+    struct LongKey
+    {
+    	uint8_t len; // 0 ~ 255
+    	char key[MAX_KEY_LEN];
+
+    	LongKey(const char* k, int l)
+    	{
+    		len = l;
+    		std::memcpy(key, k, len);
+    	}
+    };
 #else
     typedef uint64_t key_type; // ADAPTIVE_PREFIX: key type >= 8 bytes, otherwise >= 4. count is stored in first key of inner
 #endif

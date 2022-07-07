@@ -46,7 +46,7 @@ bool tree_wrapper::find(const char *key, size_t key_sz, char *value_out)
   key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
   bool found = t_.lookup(k, val);
 #elif defined(LONG_KEY)
-  bool found = t_.lookup(LongKey(key, key_sz), val);
+  bool found = t_.lookup(LongKey(key), val);
 #else
   bool found = t_.lookup(*reinterpret_cast<key_type*>(const_cast<char*>(key)), val);
 #endif
@@ -72,7 +72,7 @@ bool tree_wrapper::insert(const char *key, size_t key_sz, const char *value, siz
   #endif
   return t_.insert(k, reinterpret_cast<val_type>(const_cast<char*>(value)));
 #elif defined(LONG_KEY)
-  return t_.insert(LongKey(key, key_sz), reinterpret_cast<val_type>(const_cast<char*>(value)));
+  return t_.insert(LongKey(key), reinterpret_cast<val_type>(const_cast<char*>(value)));
 #else
   return t_.insert(*reinterpret_cast<key_type*>(const_cast<char*>(key)), 
     reinterpret_cast<val_type>(const_cast<char*>(value)));
@@ -85,7 +85,7 @@ bool tree_wrapper::update(const char *key, size_t key_sz, const char *value, siz
   key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
   return t_.update(k, reinterpret_cast<val_type>(const_cast<char*>(value)));
 #elif defined(LONG_KEY)
-  return t_.update(LongKey(key, key_sz), reinterpret_cast<val_type>(const_cast<char*>(value)));
+  return t_.update(LongKey(key), reinterpret_cast<val_type>(const_cast<char*>(value)));
 #else
   return t_.update(*reinterpret_cast<key_type*>(const_cast<char*>(key)), *reinterpret_cast<val_type*>(const_cast<char*>(value)));
 #endif
@@ -115,7 +115,7 @@ int tree_wrapper::scan(const char *key, size_t key_sz, int scan_sz, char *&value
   key_type k(reinterpret_cast<char*>(const_cast<char*>(key)), key_sz);
   t_.rangeScan(k, sh);
 #elif defined(LONG_KEY)
-  t_.rangeScan(LongKey(key, key_sz), sh);
+  t_.rangeScan(LongKey(key), sh);
 #else
   t_.rangeScan(*reinterpret_cast<key_type*>(const_cast<char*>(key)), sh);
 #endif

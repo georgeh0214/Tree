@@ -158,15 +158,14 @@
     #define MAX_KEY_LEN 26
     struct LongKey
     {
-    	uint8_t len; // 0 ~ 255
     	char key[MAX_KEY_LEN];
 
-    	LongKey(const char* k, int l)
+    	LongKey(const char* k)
     	{
-    		len = l;
-    		std::memcpy(key, k, len);
+    		std::memcpy(key, k, MAX_KEY_LEN);
     	}
     };
+    typedef LongKey key_type;
 #else
     typedef uint64_t key_type; // ADAPTIVE_PREFIX: key type >= 8 bytes, otherwise >= 4. count is stored in first key of inner
 #endif
@@ -176,6 +175,8 @@ inline static uint8_t getOneByteHash(key_type k)
 {
 #ifdef STRING_KEY
     uint8_t oneByteHashKey = std::_Hash_bytes(k.key, k.length, 1) & 0xff;
+#elif defined(LONG_KEY)
+    uint8_t oneByteHashKey = std::_Hash_bytes(k.key, MAX_KEY_LEN, 1) & 0xff;
 #else
     uint8_t oneByteHashKey = std::_Hash_bytes(&k, sizeof(key_type), 1) & 0xff;
 #endif

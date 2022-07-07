@@ -75,6 +75,8 @@ inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
 {
 #if defined(PM) && defined(STRING_KEY)
     return compare(pmemobj_direct(a.key), pmemobj_direct(b.key), a.len, b.len) < 0;
+#elif defined(LONG_KEY)
+    return std::memcmp(a.key, b.key, MAX_KEY_LEN) < 0;
 #else
     return a.key < b.key;
 #endif

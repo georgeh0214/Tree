@@ -4,20 +4,20 @@
 #include <atomic>
 #include <sys/stat.h>
 
-#define INNER_KEY_NUM 38 // 38 for integer keys, 256 for string keys
+#define INNER_KEY_NUM 256 // 38 for integer keys, 256 for string keys
 #define LEAF_KEY_NUM 64 // <= 64 due to bitmap, 13 if PM without FINGERPRINT
 #define MAX_HEIGHT 32 // should be enough
 
-#define PM
+//#define PM
 #define ALIGNED_ALLOC // allocate by 256 blocks
 #define NEW_PERSIST // asm volatile
 
-//#define FINGERPRINT
-//#define SIMD // AVX512
+#define FINGERPRINT
+#define SIMD // AVX512
 #define PREFETCH // not effective
 #define BRANCH_PRED
 #define EARLY_SPLIT 2
-//#define Binary_Search // only faster with STRING_KEY
+#define Binary_Search // only faster with STRING_KEY
 //#define STRING_KEY 
 #define LONG_KEY
 
@@ -177,6 +177,7 @@
           			return k1[-1] < k2[-1] ? -1 : 1;
     		return 0;
     		// Method 3: compare 8 bytes at a time
+/*
     		int i = MAX_KEY_LEN - 8;
     		while (i >= 0)
     		{
@@ -190,6 +191,7 @@
     			if (*k1++ != *k2++)
           			return k1[-1] < k2[-1] ? -1 : 1;
           	return 0;
+*/
     	}
 
     	inline bool operator<(const LongKey &other) { return compare(key, other.key) < 0; }

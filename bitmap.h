@@ -176,14 +176,28 @@
     			if (*k1++ != *k2++)
           			return k1[-1] < k2[-1] ? -1 : 1;
     		return 0;
+    		// Method 3: compare 8 bytes at a time
+    		int i = MAX_KEY_LEN - 8;
+    		while (i >= 0)
+    		{
+    			if (*(uint64_t*)k1 != *(uint64_t*)k2)
+    				return *(uint64_t*)k1 > *(uint64_t*)k2 ? -1 : 1;
+    			k1 += 8;
+    			k2 += 8;
+    			i -= 8;
+    		}
+    		for (i = i + 8; i; i--)
+    			if (*k1++ != *k2++)
+          			return k1[-1] < k2[-1] ? -1 : 1;
+          	return 0;
     	}
 
-    	inline bool operator<(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) < 0; }
-        inline bool operator>(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) > 0; }
-        inline bool operator==(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) == 0; }
-        inline bool operator!=(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) != 0; }
-        inline bool operator<=(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) <= 0; }
-        inline bool operator>=(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) >= 0; }
+    	inline bool operator<(const LongKey &other) { return compare(key, other.key) < 0; }
+        inline bool operator>(const LongKey &other) { return compare(key, other.key) > 0; }
+        inline bool operator==(const LongKey &other) { return compare(key, other.key) == 0; }
+        inline bool operator!=(const LongKey &other) { return compare(key, other.key) != 0; }
+        inline bool operator<=(const LongKey &other) { return compare(key, other.key) <= 0; }
+        inline bool operator>=(const LongKey &other) { return compare(key, other.key) >= 0; }
     };
     typedef LongKey key_type;
 #else

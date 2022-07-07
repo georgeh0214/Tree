@@ -167,7 +167,7 @@
     		std::memcpy(key, k, MAX_KEY_LEN);
     	}
 
-    	inline int compare(char* k1, char* k2)
+    	inline int compare(const char* k1, const char* k2)
     	{
     		// Method 1: memcmp
     		// return std::memcmp(k1, k2, MAX_KEY_LEN);

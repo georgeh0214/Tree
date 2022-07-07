@@ -167,12 +167,12 @@
     		std::memcpy(key, k, MAX_KEY_LEN);
     	}
 
-    	inline bool operator<(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) < 0; }
-        inline bool operator>(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) > 0; }
-        inline bool operator==(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) == 0; }
-        inline bool operator!=(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) != 0; }
-        inline bool operator<=(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) <= 0; }
-        inline bool operator>=(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) >= 0; }
+    	inline bool operator<(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) < 0; }
+        inline bool operator>(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) > 0; }
+        inline bool operator==(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) == 0; }
+        inline bool operator!=(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) != 0; }
+        inline bool operator<=(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) <= 0; }
+        inline bool operator>=(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) >= 0; }
     };
     typedef LongKey key_type;
 #else

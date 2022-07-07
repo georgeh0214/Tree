@@ -118,17 +118,17 @@
             }
         }
 
-	inline int compare(const StringKey &other, int offset, int compare_len)
-	{
-	    int res;
-	    int bytes_to_cmp = std::min(compare_len, other.length - offset);
-	    if (bytes_to_cmp > 0)
-	    {
-		res = std::memcmp(key + offset, other.key + offset, bytes_to_cmp);
-		return res? res : (compare_len - bytes_to_cmp);
-	    }
-	    return 1;
-	}
+		inline int compare(const StringKey &other, int offset, int compare_len)
+		{
+		    int res;
+		    int bytes_to_cmp = std::min(compare_len, other.length - offset);
+		    if (bytes_to_cmp > 0)
+		    {
+			res = std::memcmp(key + offset, other.key + offset, bytes_to_cmp);
+			return res? res : (compare_len - bytes_to_cmp);
+		    }
+		    return 1;
+		}
 
         inline bool operator<(const StringKey &other) { return compare(other) < 0; }
         inline bool operator>(const StringKey &other) { return compare(other) > 0; }
@@ -160,10 +160,19 @@
     {
     	char key[MAX_KEY_LEN];
 
+    	LongKey() {}
+
     	LongKey(const char* k)
     	{
     		std::memcpy(key, k, MAX_KEY_LEN);
     	}
+
+    	inline bool operator<(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) < 0; }
+        inline bool operator>(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) > 0; }
+        inline bool operator==(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) == 0; }
+        inline bool operator!=(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) != 0; }
+        inline bool operator<=(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) <= 0; }
+        inline bool operator>=(const LongKey &other) { return std::memcpy(key, other.key, MAX_KEY_LEN) >= 0; }
     };
     typedef LongKey key_type;
 #else

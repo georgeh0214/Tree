@@ -167,6 +167,17 @@
     		std::memcpy(key, k, MAX_KEY_LEN);
     	}
 
+    	inline int compare(char* k1, char* k2)
+    	{
+    		// Method 1: memcmp
+    		// return std::memcmp(k1, k2, MAX_KEY_LEN);
+    		// Method 2: compare each char
+    		for (int i = 0; i < MAX_KEY_LEN; i++)
+    			if (*k1++ != *k2++)
+          			return k1[-1] < k2[-1] ? -1 : 1;
+    		return 0;
+    	}
+
     	inline bool operator<(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) < 0; }
         inline bool operator>(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) > 0; }
         inline bool operator==(const LongKey &other) { return std::memcmp(key, other.key, MAX_KEY_LEN) == 0; }

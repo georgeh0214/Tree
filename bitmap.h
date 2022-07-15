@@ -167,17 +167,23 @@
     		std::memcpy(key, k, MAX_KEY_LEN);
     	}
 
+        LongKey(const LongKey& other)
+        {
+            std::memcpy(key, other.key, MAX_KEY_LEN);
+        }
+
     	inline int compare(const char* k1, const char* k2)
     	{
     		// Method 1: memcmp
     		// return std::memcmp(k1, k2, MAX_KEY_LEN);
     		// Method 2: compare each char
-    		for (int i = 0; i < MAX_KEY_LEN; i++)
-    			if (*k1++ != *k2++)
-          			return k1[-1] < k2[-1] ? -1 : 1;
-    		return 0;
+    		// for (int i = 0; i < MAX_KEY_LEN; i++)
+    		// 	if (*k1++ != *k2++)
+      //     			return k1[-1] < k2[-1] ? -1 : 1;
+    		// return 0;
+
     		// Method 3: compare 8 bytes at a time
-/*
+
     		int i = MAX_KEY_LEN - 8;
     		while (i >= 0)
     		{
@@ -191,7 +197,7 @@
     			if (*k1++ != *k2++)
           			return k1[-1] < k2[-1] ? -1 : 1;
           	return 0;
-*/
+
     	}
 
     	inline bool operator<(const LongKey &other) { return compare(key, other.key) < 0; }

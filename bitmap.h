@@ -16,7 +16,7 @@ inline static uint8_t getOneByteHash(const char* k, uint32_t len)
     return std::_Hash_bytes(k, len, 1) & 0xff;
 }
 
-inline static int compare(const char* k1, const char* k2, uint32_t len)
+inline static int compareKey(const char* k1, const char* k2, uint32_t len)
 {
     // Method 1: memcmp
     // return std::memcmp(k1, k2, len);

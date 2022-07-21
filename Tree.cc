@@ -2,7 +2,7 @@
 
 int Tree::compare(const char* k1, const char* k2)
 {
-    return compare(k1, k2, meta.key_len);
+    return compareKey(k1, k2, meta.key_len);
 }
 
 Node* Tree::findInnerChild(Node* inner, const char* key, short* pos)
@@ -47,7 +47,7 @@ char* Tree::searchLeaf(Node* leaf, const char* key)
         __mmask64 mask = _mm512_cmpeq_epu8_mask(key_64B, fgpt_64B);
 
         mask &= offset; // in case meta.leaf_key_num < 64
-        mask &= bitmap.bits; // only check existing entries
+        mask &= getLeafBitmap(leaf)->bits; // only check existing entries
         for (i = 0; mask; i++, mask >>= 1)
         {
             cur_key = getLeafKey(leaf, i);
@@ -57,7 +57,7 @@ char* Tree::searchLeaf(Node* leaf, const char* key)
     }
     else
     {
-        uint64_t bits = bitmap.bits;
+        uint64_t bits = getLeafBitmap(leaf)->bits;
         char* cur_key = getLeafKey(leaf, 0);
         uint32_t leaf_ent_size = meta.key_len + meta.value_len;
         int i;
@@ -100,7 +100,7 @@ void Tree::insertLeafEntry(Node* leaf, const char* key, char* val)
 Node* Tree::findLeaf(const char* key, uint64_t& version, bool lock)
 {
     uint64_t currentVersion, previousVersion;
-    Node* current, previous;
+    Node* current, * previous;
     int i;
     short pos;
 
@@ -201,7 +201,7 @@ bool Tree::update(const char* key, char* new_val)
 
 RetryUpdate:
     leaf = findLeaf(key, version, true);
-    char* value_ptr = searchLeaf(leaf, key);
+    value_ptr = searchLeaf(leaf, key);
     if (value_ptr)
     {
         std::memcpy(value_ptr, new_val, meta.value_len);
@@ -255,11 +255,11 @@ RetryInsert:
 
             inline bool operator() (int i, int j)
             {
-                return compare(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len);
+                return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len);
             }
         };
         leaf_ent_size = meta.key_len + meta.value_len;
-        std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, i)), leaf_ent_size, meta.key_len);
+        std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, i), leaf_ent_size, meta.key_len));
 
         int split_pos = meta.leaf_key_num / 2;
         char* split_key = getLeafKey(leaf, split_pos);
@@ -268,7 +268,7 @@ RetryInsert:
         // alloc new leaf
         if (meta.pop) // PM.
         {
-            char* next_ptr_addr = getNextLeafPtrAddr(leaf, sizeof(PMEMoid) * (alt + 1));
+            char* next_ptr_addr = (char*)getNextLeafPtrAddr(leaf, sizeof(PMEMoid) * (alt + 1));
             new_node = alloc_leaf((PMEMoid*)next_ptr_addr);
         }
         else
@@ -368,8 +368,9 @@ RetryInsert:
         new_inner = alloc_inner();
         while (!new_inner->lock()) {}
         getInnerCount(new_inner) = 1;
-        start_key_pos = getInnerChild(new_inner, 0);
-        *(Node**)start_key_pos = this->root;
+        *(Node**)(getInnerKey(new_inner, 0) + meta.key_len) = this->root;
+        // start_key_pos = getInnerChild(new_inner, 0);
+        // *(Node**)start_key_pos = this->root;
         insertInnerEntry(new_inner, split_key, new_node, 1);
 
         // new_inner->count() = 1;

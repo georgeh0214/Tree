@@ -406,7 +406,7 @@ private:
             key_hash_ = getOneByteHash(key, meta.key_len);
     }
 
-    int compare(const char* k1, const char* k2);
+    inline int compare(const char* k1, const char* k2);
 
     // Inner
     inline uint32_t& getInnerCount(Node* inner)

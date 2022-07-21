@@ -13,7 +13,7 @@ override CFLAGS += -g -std=c++17 -pthread -O3 # -mrtm -msse4.1 -mavx2 -Wall -O3 
 LIB=-lpmemobj
 
 COMMON_DEPENDS= tree_api.hpp Tree.h Tree.cc 
-COMMON_SOURCES= tree.cc
+COMMON_SOURCES= Tree.cc
 
 # -----------------------------------------------------------------------------
 TARGETS=main tree_wrapper

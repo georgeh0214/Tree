@@ -179,23 +179,23 @@ public:
 // } __attribute__((aligned(256)));
 
 
-static void prefetchInner(void* addr)
-{
-#define INNER_LINE_NUM sizeof(Inner) / 64 
-    for (int i = 0; i < INNER_LINE_NUM; i++, addr += 64)
-        __asm__ __volatile__("prefetcht0 %0" \
-                      :               \
-                      : "m"(*((char *)addr)));
-}
+// static void prefetchInner(void* addr)
+// {
+// #define INNER_LINE_NUM sizeof(Inner) / 64 
+//     for (int i = 0; i < INNER_LINE_NUM; i++, addr += 64)
+//         __asm__ __volatile__("prefetcht0 %0" \
+//                       :               \
+//                       : "m"(*((char *)addr)));
+// }
 
-static void prefetchLeaf(void* addr)
-{
-#define LEAF_LINE_NUM sizeof(Leaf) / 64
-    for (int i = 0; i < INNER_LINE_NUM; i++, addr += 64)
-        __asm__ __volatile__("prefetcht0 %0" \
-                      :               \
-                      : "m"(*((char *)addr)));
-}
+// static void prefetchLeaf(void* addr)
+// {
+// #define LEAF_LINE_NUM sizeof(Leaf) / 64
+//     for (int i = 0; i < INNER_LINE_NUM; i++, addr += 64)
+//         __asm__ __volatile__("prefetcht0 %0" \
+//                       :               \
+//                       : "m"(*((char *)addr)));
+// }
 
 class Tree
 {
@@ -229,7 +229,7 @@ public:
     bool update(const char* key, char* new_val);
 
     // range scan with customized scan helper
-    void rangeScan(const char* start_key, ScanHelper& sh);
+    // void rangeScan(const char* start_key, ScanHelper& sh);
 
     // Use given meta m to initialize Tree struct, assume Tree is already mapped to an entry in pop.root if running in PM
     void init(TreeMeta& m, bool recovery)
@@ -297,12 +297,12 @@ public:
             int tree_cnt = root_size / sizeof(Tree);
             printf("Current pop contains at most %d Trees\n", tree_cnt);
 
-            Tree* root = (Tree*)pmemobj_direct(pmemobj_root(m.pop, root_size)); // will not change root size
+            Tree* pop_root = (Tree*)pmemobj_direct(pmemobj_root(m.pop, root_size)); // will not change root size
             for (int i = 0; i < tree_cnt; i++) // go through existing TreeMeta entries to see if creating alloc class is necessary
             {
-                if (root[i].class_id != 0 && root[i].meta.leaf_size == m.leaf_size) // found another existing PM Tree with same leaf size
+                if (pop_root[i].class_id != 0 && pop_root[i].meta.leaf_size == m.leaf_size) // found another existing PM Tree with same leaf size
                 {
-                    class_id = root[i].class_id;
+                    class_id = pop_root[i].class_id;
                     printf("Reuse existing allocation class id: %d \n", class_id);
                     break;
                 }

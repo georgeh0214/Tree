@@ -23,7 +23,7 @@ public:
     virtual int scan(const char *key, size_t key_sz, int scan_sz, char *&values_out) override;
 
 private:
-    tree* t_;
+    Tree* t_;
 };
 
 tree_wrapper::tree_wrapper()

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <atomic>
 #include <sys/stat.h>
+#include <cassert>
 
 #define MAX_HEIGHT 32 // should be enough
 
@@ -10,7 +11,7 @@
 
 #define PREFETCH // not effective
 
-inline static uint8_t getOneByteHash(char* k, uint32_t len)
+inline static uint8_t getOneByteHash(const char* k, uint32_t len)
 {
     return std::_Hash_bytes(k, len, 1) & 0xff;
 }
@@ -96,7 +97,7 @@ class Bitmap
         bits ^= offset;
     }
 
-    inline bool is_full(offset)
+    inline bool is_full(uint64_t offset)
     {
         return bits == offset;
     }
@@ -112,7 +113,7 @@ class Bitmap
         return idx - 1;
     }
 
-    inline int first_zero(offset) 
+    inline int first_zero(uint64_t offset) 
     {
         int idx = __builtin_ffsl(bits ^ offset);
         return idx - 1;

@@ -1,6 +1,6 @@
 #include <omp.h>
 #include "tree_api.hpp"
-#include "tree.h"
+#include "Tree.h"
 #include <thread>
 #include <sys/types.h>
 

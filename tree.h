@@ -1,88 +1,89 @@
+#include <libpmemobj.h> // PMDK
+#include <immintrin.h> // SIMD
+
 #include "bitmap.h"
 
-/*------------------------------------------------------------------------*/
+struct TreeMeta {
+    PMEMobjpool * pop; // should be nullptr if running entirely in DRAM
+    uint32_t inner_size; // size of inner node
+    uint32_t leaf_size; // size of leaf node
+    uint16_t inner_key_num; // xor max # of keys in each inner
+    uint16_t leaf_key_num; // xor max # of keys in each leaf <= 64
+    uint32_t key_len; // fixed key len
+    uint32_t value_len; // fixed value len
+    bool enable_fp; // whether to store fps in leaf
+    bool enable_simd; // whether to use simd to compare fps
+    bool binary_search; // linear/binary search inner node
 
-class Inner;
-class Leaf;
+    TreeMeta()
+    {
+        std::memset(this, 0, sizeof(TreeMeta));
+    }
+};
 
-#ifdef PM
-    #include <libpmemobj.h>
-    POBJ_LAYOUT_BEGIN(Tree);
-    POBJ_LAYOUT_TOID(Tree, Leaf);
-    POBJ_LAYOUT_TOID(Tree, char);
-    POBJ_LAYOUT_END(Tree);
+union Ptr {
+    void* vp; // volatile ptr
+    PMEMoid pp; // persistent ptr
+};
 
-    extern PMEMobjpool * pop_;
-    extern uint64_t class_id;
-    extern thread_local PMEMoid string_key_;
-#endif
-
-#ifdef SIMD
-    #include <immintrin.h>
-#endif
-
-thread_local static Inner* anc_[MAX_HEIGHT];
+struct Node;
+thread_local static Node* anc_[MAX_HEIGHT];
 thread_local static short pos_[MAX_HEIGHT];
 thread_local static uint64_t versions_[MAX_HEIGHT];
 thread_local static uint8_t key_hash_;
 
-class Node;
-struct InnerEntry
-{
-    key_type key;
-    Node* child;
-};
+// struct Node;
+// struct InnerEntry
+// {
+//     key_type key;
+//     Node* child;
+// };
 
-struct LeafEntry
-{
-#if defined(PM) && defined(STRING_KEY)
-    PMEMoid key;
-    uint32_t len;
-#else
-    key_type key;
-#endif
-    val_type val;
-};
+// struct LeafEntry
+// {
+//     key_type key;
+//     val_type val;
+// };
 
-class ScanHelper // implement 
-{
-public:
-    LeafEntry* start;
-    LeafEntry* cur;
-    int scan_size;
-    int scanned;
+// struct ScanHelper // implement 
+// {
+// public:
+//     LeafEntry* start;
+//     LeafEntry* cur;
+//     int scan_size;
+//     int scanned;
 
-    ScanHelper(int c, char* r) // initializer
-    {
-        scanned = 0;
-        scan_size = c; 
-        start = cur = (LeafEntry*)r; 
-    }
+//     ScanHelper(int c, char* r) // initializer
+//     {
+//         scanned = 0;
+//         scan_size = c; 
+//         start = cur = (LeafEntry*)r; 
+//     }
 
-    void reset() { scanned = 0; cur = start; } // called upon retry
+//     void reset() { scanned = 0; cur = start; } // called upon retry
 
-    bool stop() { return scanned >= scan_size; } // this is called once after scanning each leaf
+//     bool stop() { return scanned >= scan_size; } // this is called once after scanning each leaf
 
-    inline void scanEntry(const LeafEntry& ent) // what to do with each entry scanned
-    {
-        *cur = ent;
-        cur ++;
-        scanned ++;
-    }
-};
+//     inline void scanEntry(const LeafEntry& ent) // what to do with each entry scanned
+//     {
+//         *cur = ent;
+//         cur ++;
+//         scanned ++;
+//     }
+// };
 
-inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
-{
-#if defined(PM) && defined(STRING_KEY)
-    return compare(pmemobj_direct(a.key), pmemobj_direct(b.key), a.len, b.len) < 0;
-#elif defined(LONG_KEY)
-    return a.key < b.key;
-#else
-    return a.key < b.key;
-#endif
-}
+// inline static bool leafEntryCompareFunc(LeafEntry& a, LeafEntry& b)
+// {
+// #if defined(PM) && defined(STRING_KEY)
+//     return compare(pmemobj_direct(a.key), pmemobj_direct(b.key), a.len, b.len) < 0;
+// #elif defined(LONG_KEY)
+//     return a.key < b.key;
+// #else
+//     return a.key < b.key;
+// #endif
+// }
 
-class Node
+struct Node
 {
 public:
     std::atomic<uint64_t> versionLock{0b100};
@@ -110,171 +111,73 @@ public:
     void unlockFlipAlt(bool alt) { alt? versionLock.fetch_add(0b1) : versionLock.fetch_add(0b11); }
 };
 
-class Inner : public Node
-{
-public:
-    InnerEntry ent[INNER_KEY_NUM + 1]; // count stored in first key
+// struct Inner : public Node
+// {
+// public:
+//     uint32_t count;
+//     InnerEntry ent[INNER_KEY_NUM + 1]; // count stored in first key
 
-    Inner() 
-    { 
-        count() = 0;
-    #ifdef ADAPTIVE_PREFIX
-        prefix_offset() = 0;
-    #endif
-    }
-    // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
-    int& count() { return *((int*)(ent)); }
-#ifdef ADAPTIVE_PREFIX
-    int& prefix_offset() { return ((int*)(ent))[1]; }
-    void adjustPrefix(short index) // for inner that contains inserted key
-    {
-        int cnt = count(), i;
-        if (index == 1 || index == cnt)
-        {
-            uint16_t prefix_offset = this->prefix_offset();
-            int len = std::min(this->ent[1].key.length, this->ent[cnt].key.length), j;
-            for (i = 0; i < len; i++)
-                if (this->ent[1].key.key[i] != this->ent[cnt].key.key[i])
-                    break;
-            if (i != prefix_offset)
-            {
-                this->prefix_offset() = i;
-                for (j = 1; j <= cnt; j++)
-                    this->ent[j].key.prefix = getPrefixWithOffset(this->ent[j].key.key, this->ent[j].key.length, i);
-            }
-        }
-        else
-            adjustPrefix();
-    }
-    void adjustPrefix() // for inner that only contains original keys
-    {
-        uint16_t prefix_offset = this->prefix_offset();
-        int cnt = this->count();
-        while (this->ent[1].key.prefix == this->ent[cnt].key.prefix) 
-        {
-            prefix_offset += 6;
-            this->ent[1].key.prefix = getPrefixWithOffset(this->ent[1].key.key, this->ent[1].key.length, prefix_offset);
-            this->ent[cnt].key.prefix = getPrefixWithOffset(this->ent[cnt].key.key, this->ent[cnt].key.length, prefix_offset);
-        }
-        if (prefix_offset != this->prefix_offset())
-        {
-            for (int i = 2; i < cnt; i++)
-                this->ent[i].key.prefix = getPrefixWithOffset(this->ent[i].key.key, this->ent[i].key.length, prefix_offset);
-            this->prefix_offset() = prefix_offset;
-        }
-    }
-#endif
-    bool isFull() { return count() == INNER_KEY_NUM; }
+//     Inner() 
+//     { 
+//         count() = 0;
+//     }
+//     // ~Inner() { for (int i = 0; i <= count(); i++) { delete this->ent[i].child; } } ToDo: cannot delete void*
+//     int& count() { return *((int*)(ent)); }
 
-    int find(key_type key);
-    Node* findChildSetPos(key_type key, short* pos);
-    Node* findChild(key_type key);
-    inline void insertChild(short index, key_type key, Node* child); // insert key, child at index, does not increment count
+//     bool isFull() { return count() == INNER_KEY_NUM; }
 
-} __attribute__((aligned(64)));
+//     int find(key_type key);
+//     Node* findChildSetPos(key_type key, short* pos);
+//     Node* findChild(key_type key);
+//     inline void insertChild(short index, key_type key, Node* child); // insert key, child at index, does not increment count
 
-class Leaf : public Node
-{
-public:
-    Bitmap bitmap; // 8 byte
-#ifdef FINGERPRINT
-    uint8_t fp[LEAF_KEY_NUM];
-#endif
-    LeafEntry ent[LEAF_KEY_NUM];
-#ifdef PM
-    PMEMoid next[2]; // 32 byte
-#else
-    Leaf* next[2]; // 16 byte
-#endif
+// } __attribute__((aligned(64)));
 
-    Leaf() 
-    { 
-    #ifdef PM
-        next[0] = next[1] = OID_NULL; 
-    #else
-        next[0] = next[1] = nullptr; 
-    #endif
-    }
-    Leaf(const Leaf& leaf);
-    ~Leaf();
+// struct Leaf : public Node
+// {
+// public:
+//     Bitmap bitmap; // 8 byte
+// #ifdef FINGERPRINT
+//     uint8_t fp[LEAF_KEY_NUM];
+// #endif
 
-    int count() { return bitmap.count(); }
+//     LeafEntry ent[LEAF_KEY_NUM];
 
-    Leaf* sibling() 
-    { 
-    #ifdef PM
-        return (Leaf*) pmemobj_direct(next[alt()]);
-    #else
-        return next[alt()]; 
-    #endif
-    }
+// #ifdef PM
+//     PMEMoid next[2]; // 32 byte
+// #else
+//     Leaf* next[2]; // 16 byte
+// #endif
 
-    void insertEntry(key_type key, val_type val);
-    int findKey(key_type key); // return position of key if found, -1 if not found
-} __attribute__((aligned(256)));
 
-static Inner* allocate_inner() { return new Inner; }
 
-#ifdef PM
-    static Leaf* allocate_leaf(PMEMoid* oid) 
-    {
-    #ifdef ALIGNED_ALLOC
-        thread_local pobj_action act;
-        // auto x = POBJ_XRESERVE_NEW(pop, dummy, &act, POBJ_CLASS_ID(class_id));
-        *oid = pmemobj_xreserve(pop_, &act, sizeof(Leaf), 0, POBJ_CLASS_ID(class_id));
-        // D_RW(x)->arr[0] = NULL;
-        // D_RW(x)->arr[31] = NULL;
-        // (((unsigned long long)(D_RW(x)->arr)) & (~(unsigned long long)(64 - 1)));
-        // (((unsigned long long)(D_RW(x)->arr+32)) & (~(unsigned long long)(64 - 1)));
-        // if (((unsigned long long)pmemobj_direct(*oid)) % 256 != 0)
-        // {
-        //     printf("leaf(%p): not aligned at 256B\n", pmemobj_direct(*oid));
-        //     exit(1);
-        // }
-    #else
-        if (pmemobj_alloc(pop_, oid, sizeof(Leaf), 0, NULL, NULL) != 0)
-        {
-            printf("pmemobj_alloc\n");
-            exit(1);
-        }
-    #endif
-        return (Leaf*) pmemobj_direct(*oid);
-    }
 
-    static void* allocate_size(PMEMoid* oid, uint32_t size) 
-    {
-        thread_local pobj_action act;
-        *oid = pmemobj_reserve(pop_, &act, size, 1);
-        return pmemobj_direct(*oid);
-    }
-#else
-    static Leaf* allocate_leaf() { return new Leaf; }
-#endif
+//     Leaf() 
+//     { 
+//     #ifdef PM
+//         next[0] = next[1] = OID_NULL; 
+//     #else
+//         next[0] = next[1] = nullptr; 
+//     #endif
+//     }
+//     Leaf(const Leaf& leaf);
+//     ~Leaf();
 
-static void clwb(void* addr, uint32_t len)
-{
-#ifdef PM
-    #ifdef NEW_PERSIST
-        for (uint32_t i = 0; i < len; i += 64, addr += 64)
-            asm volatile("clwb %0"
-                   :
-                   : "m"(*((char *)addr)));
-    #else
-        pmemobj_flush(pop_, addr, len);
-    #endif
-#endif
-}
+//     int count() { return bitmap.count(); }
 
-static void sfence()
-{
-#ifdef PM
-    #ifdef NEW_PERSIST
-        asm volatile("sfence");
-    #else
-        pmemobj_drain(pop_);
-    #endif
-#endif
-}
+//     Leaf* sibling() 
+//     { 
+//     #ifdef PM
+//         return (Leaf*) pmemobj_direct(next[alt()]);
+//     #else
+//         return next[alt()]; 
+//     #endif
+//     }
+
+//     void insertEntry(key_type key, val_type val);
+//     int findKey(key_type key); // return position of key if found, -1 if not found
+// } __attribute__((aligned(256)));
+
 
 static void prefetchInner(void* addr)
 {
@@ -294,109 +197,296 @@ static void prefetchLeaf(void* addr)
                       : "m"(*((char *)addr)));
 }
 
-class tree
+class Tree
 {
 public:
     Node* root;
-    int height; // leaf at level 0
+    uint64_t offset; // for bitmap
+    uint16_t height; // leaf at level 0
+    uint16_t class_id; // to allocate PM blocks by 256B alignment
+    
+    TreeMeta meta; // 27B
+    Ptr first_leaf;
 
-    tree()
-    {
-        printf("Inner size:%d \n", sizeof(Inner));
-        printf("Leaf size:%d \n", sizeof(Leaf));
-    #ifdef Binary_Search
-        printf("Binary search inner.\n");
-    #else
-        printf("Linear search inner.\n");
-    #endif
-    #ifdef FINGERPRINT
-        printf("Fingerprint enabled.\n");
-    #endif
-    #ifdef STRING_KEY
-        printf("Using String Key.\n");
-    #endif
-    #ifdef PREFIX
-        printf("Prefix enabled.\n");
-    #endif
-    #ifdef ADAPTIVE_PREFIX
-        printf("Adaptive prefix enabled.\n");
-    #endif
-    }
+    Tree() {}
 
-    ~tree()
+    ~Tree()
     {
         printf("Tree height: %d \n", height);
-    #ifdef PM
-        pmemobj_close(pop_);
-    #endif
-        // delete (Leaf*)root; ToDo: 
+        // delete (Leaf*)root; ToDo: reclaim memory
     }
 
     // return true and set val if lookup successful, 
-    bool lookup(key_type key, val_type& val);
+    bool lookup(const char* key, char* val);
 
     // return true if insert successful
-    bool insert(key_type key, val_type val);
+    bool insert(const char* key, char* val);
 
     // return true if delete successful
-    bool del(key_type key);
+    bool del(const char* key);
 
     // return true if entry with target key is found and val is set to new_val
-    bool update(key_type key, val_type new_val);
+    bool update(const char* key, char* new_val);
 
     // range scan with customized scan helper
-    void rangeScan(key_type start_key, ScanHelper& sh);
+    void rangeScan(const char* start_key, ScanHelper& sh);
 
-    void init(const char* pool_path, uint64_t pool_size)
+    // Use given meta m to initialize Tree struct, assume Tree is already mapped to an entry in pop.root if running in PM
+    void init(TreeMeta& m, bool recovery)
     {
+        root = nullptr;
         height = 0;
-    #ifdef PM
-        struct stat buffer;
-        if (stat(pool_path, &buffer) == 0)
+        offset = 0;
+        class_id = 0;
+        if (m.pop)
+            first_leaf.pp = OID_NULL;
+        else
+            first_leaf.vp = nullptr;
+
+        assert(!m.inner_size != !m.inner_key_num && "Only one field of inner params should be valid");
+        assert(!m.leaf_size != !m.leaf_key_num && "Only one field of leaf params should be valid");
+        assert(m.key_len && "Invalid key length");
+
+        printf("Tree struct size: %d \n", sizeof(Tree));
+
+        auto inner_ent_size = m.key_len + sizeof(Node*);
+        auto leaf_ent_size = m.key_len + m.value_len;
+
+        // set inner size or key_num
+        if (m.inner_size)
+            m.inner_key_num = (m.inner_size - sizeof(Node) - sizeof(uint32_t)) / inner_ent_size - 1; // - lock - cnt, reserve 1 entry for extra child ptr
+        else
+            m.inner_size = (m.inner_key_num + 1) * inner_ent_size + sizeof(Node) + sizeof(uint32_t);
+        printf("Inner size: %d \n", m.inner_size);
+        printf("Inner key num: %d \n", m.inner_key_num);
+
+        // set leaf size or key_num
+        auto ptr_size = m.pop? sizeof(PMEMoid) : sizeof(void*); // size of leaf next ptr
+        if (m.leaf_size)
         {
-            printf("Recovery not implemented!\n");
-            exit(1);
+            if (m.enable_fp)
+                m.leaf_key_num = (m.leaf_size - sizeof(Node) - sizeof(Bitmap) - ptr_size * 2) / (leaf_ent_size + sizeof(key_hash_));
+            else
+                m.leaf_key_num = (m.leaf_size - sizeof(Node) - sizeof(Bitmap) - ptr_size * 2) / leaf_ent_size;
         }
         else
         {
-            printf("Creating PMEM pool of size: %llu \n", pool_size);
-            pop_ = pmemobj_create(pool_path, POBJ_LAYOUT_NAME(Tree), pool_size, 0666);
-            if (!pop_)
+            if (m.enable_fp)
+                m.leaf_size = m.leaf_key_num * (leaf_ent_size + sizeof(key_hash_)) + sizeof(Node) + sizeof(Bitmap) + ptr_size * 2;
+            else
+                m.leaf_size = m.leaf_key_num * leaf_ent_size + sizeof(Node) + sizeof(Bitmap) + ptr_size * 2;
+        }
+        if (m.leaf_key_num > 64)
+        {
+            printf("Current bitmap implementation supports at most 64 entries in leaf node, the calculated setting is: %d \n", m.leaf_key_num);
+            exit(1);
+        }
+        uint32_t leaf_size_align = m.leaf_size;
+        leaf_size_align += m.leaf_size % 256 == 0? 0 : (256 - m.leaf_size % 256);
+        printf("Leaf size without alignment: %d     with alignment: %d      differences: %d \n", m.leaf_size, leaf_size_align, leaf_size_align - m.leaf_size);
+        printf("Leaf key num: %d \n", m.leaf_key_num);
+        m.leaf_size = leaf_size_align;
+
+
+        meta = m;
+        offset = (uint64_t)(-1) >> (64 - m.leaf_key_num); // bitmap offset
+        if (m.pop) // PM. Parse existing Tree metas 
+        {
+            size_t root_size = pmemobj_root_size(m.pop);
+            assert(root_size > 0 && "Should expand root before calling init function")
+            int tree_cnt = root_size / sizeof(Tree);
+            printf("Current pop contains at most %d Trees\n", tree_cnt);
+
+            Tree* root = (Tree*)pmemobj_direct(pmemobj_root(m.pop, root_size)); // will not change root size
+            for (int i = 0; i < tree_cnt; i++) // go through existing TreeMeta entries to see if creating alloc class is necessary
             {
-                printf("pmemobj_create\n");
-                exit(1);
+                if (root[i].class_id != 0 && root[i].meta.leaf_size == m.leaf_size) // found another existing PM Tree with same leaf size
+                {
+                    class_id = root[i].class_id;
+                    printf("Reuse existing allocation class id: %d \n", class_id);
+                    break;
+                }
             }
-            #ifdef ALIGNED_ALLOC
+            if (class_id == 0) // did not find any Tree with same leaf size
+            {
                 pobj_alloc_class_desc arg;
-                arg.unit_size = sizeof(Leaf);
+                arg.unit_size = m.leaf_size;
                 arg.alignment = 256;
                 arg.units_per_block = 4096;
                 arg.header_type = POBJ_HEADER_NONE;
-                if (pmemobj_ctl_set(pop_, "heap.alloc_class.new.desc", &arg) != 0)
+                if (pmemobj_ctl_set(m.pop, "heap.alloc_class.new.desc", &arg) != 0)
                 {
                     printf("Allocation class initialization failed!\n");
                     exit(1);
                 }
                 class_id = arg.class_id;
-            #endif
-            PMEMoid p = pmemobj_root(pop_, sizeof(Leaf));
-            root = new ((Leaf*)pmemobj_direct(p)) Leaf();
-            clwb(root, sizeof(Leaf));
+                printf("Created new allocation class id: %d \n", class_id);
+            }
+            root = new (alloc_leaf(&first_leaf.pp)) Node();
+            clwb(root, meta.leaf_size);
+            clwb(this, sizeof(Tree));
             sfence();
         }
-    #else
-        root = new (allocate_leaf()) Leaf();
-    #endif
+        else // DRAM
+        {
+            root = new (alloc_leaf()) Node();
+            first_leaf.vp = root;
+        }
+
+        printf("Key length is: %d \n", m.key_len);
+        printf("Value length is: %d \n", m.value_len);
+        printf("pop is %p \n", m.pop);
+        if (m.enable_fp)
+            printf("Fingerprint enabled\n");
+        if (m.enable_simd)
+            printf("SIMD enabled \n");
+        if (m.binary_search)
+            printf("Binary search inner.\n");
+        else
+            printf("Linear search inner.\n");
+
         printf("initialization Complete.\n");
     }
 
 private:
-    Leaf* findLeaf(key_type key, uint64_t& version, bool lock);
-    Leaf* findLeafAssumeSplit(key_type key);
-    bool lockStack(Leaf* n);
-    inline void initOp(key_type& key);
-    inline void resetPrefix(key_type& key);
-};
+    // general
+    inline Node* alloc_inner()
+    {
+        char* inner = new char[meta.inner_size]; 
+        assert(inner && "alloc_inner: new");
+        return (Node*)inner;
+    }
+
+    inline Node* alloc_leaf(PMEMoid* ptr) // PM
+    {
+        assert(meta.pop && "alloc_leaf: invalid pool");
+        thread_local pobj_action act;
+        *ptr = pmemobj_xreserve(meta.pop, &act, meta.leaf_size, 0, POBJ_CLASS_ID(class_id));
+        assert(pmemobj_direct(*ptr) && "pmemobj_xreserve");
+        return (Node*)pmemobj_direct(*ptr);
+    }
+
+    inline Node* alloc_leaf() // DRAM
+    {
+        char* leaf = new char[meta.leaf_size];
+        assert(leaf && "alloc_leaf: new");
+        return (Node*)leaf;
+    }
+
+    inline void clwb(void* addr, uint32_t len)
+    {
+        if (meta.pop)
+        {
+        #ifdef NEW_PERSIST
+            for (uint32_t i = 0; i < len; i += 64, addr += 64)
+                asm volatile("clwb %0"
+                       :
+                       : "m"(*((char *)addr)));
+        #else
+            pmemobj_flush(meta.pop, addr, len);
+        #endif
+        }
+    }
+
+    inline void sfence()
+    {
+        if (meta.pop)
+        {
+        #ifdef NEW_PERSIST
+            asm volatile("sfence");
+        #else
+            pmemobj_drain(meta.pop);
+        #endif
+        }
+    }
+
+    inline void initOp(const char* key)
+    {
+        if (meta.enable_fp)
+            key_hash_ = getOneByteHash(key, meta.key_len);
+    }
+
+    int compare(const char* k1, const char* k2);
+
+    // Inner
+    inline uint32_t& getInnerCount(Node* inner)
+    {
+        return *(uint32_t*)((char*)inner + sizeof(Node));
+    }
+
+    inline bool isInnerFull(Node* inner)
+    {
+        return getInnerCount(inner) == meta.inner_key_num;
+    }
+
+    inline char* getInnerKey(Node* inner, int idx)
+    {
+        return ((char*)inner + sizeof(Node) + sizeof(uint32_t) + idx * (meta.key_len + sizeof(Node*)));
+    }
+
+    inline Node* getInnerChild(Node* inner, int idx)
+    {
+        return *(Node**)((char*)inner + sizeof(Node) + sizeof(uint32_t) + meta.key_len + idx * (meta.key_len + sizeof(Node*)));
+    }
+
+    inline void insertInnerEntry(Node* inner, char* new_key, Node* new_child, int idx)
+    {
+        char* insert_pos = getInnerKey(inner, idx);
+        std::memcpy(insert_pos, new_key, meta.key_len);
+        *(Node**)(insert_pos + meta.key_len) = new_child;
+    }
+
+    Node* findInnerChild(Node* inner, const char* key, short* pos);
+
+
+    // Leaf
+    inline Bitmap* getLeafBitmap(Node* leaf)
+    {
+        return (Bitmap*)((char*)leaf + sizeof(Node));
+    }
+
+    inline uint32_t getLeafCount(Node* leaf)
+    {
+        return getLeafBitmap(leaf)->count();
+    }
+
+    inline uint8_t& getLeafFP(Node* leaf, int idx)
+    {
+        return *(uint8_t*)((char*)leaf + sizeof(Node) + sizeof(Bitmap) + sizeof(uint8_t) * idx);
+    }
+
+    inline char* getLeafKey(Node* leaf, int idx)
+    {
+        if (meta.enable_fp)
+            return ((char*)leaf + sizeof(Node) + sizeof(Bitmap) + meta.leaf_key_num * sizeof(uint8_t) + idx * (meta.key_len + meta.value_len));
+        else
+            return ((char*)leaf + sizeof(Node) + sizeof(Bitmap) + idx * (meta.key_len + meta.value_len));
+    }
+    // here assume next ptrs are stored at the end of allocated leaf block, so may have gaps between kv entries and next ptrs due to 256B alignment
+    inline void* getNextLeafPtrAddr(Node* leaf, int offset) 
+    {
+        return ((char*)leaf + meta.leaf_size - offset);
+    }
+
+    char* searchLeaf(Node* leaf, const char* key); // return value's address if key is found
+
+    void insertLeafEntry(Node* leaf, const char* key, char* val);
+
+
+    //Tree
+    // return a leaf node that may contain key and set its version, the returned node is locked if lock = true
+    Node* findLeaf(const char* key, uint64_t& version, bool lock);
+    // return nullptr if key is found in reached leaf node, otherwise lock and return the leaf. Will also keep all nodes traversed & versions in stacks
+    Node* findLeafAssumeSplit(const char* key);
+
+    bool lockStack(Node* n);
+
+
+    
+    
+
+    
+} __attribute__((aligned(64)));
 
 static inline unsigned long long rdtsc(void)
 {

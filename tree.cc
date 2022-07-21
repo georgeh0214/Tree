@@ -1,296 +1,163 @@
-#include "tree.h"
+#include "Tree.h"
 
-#ifdef PM
-    PMEMobjpool * pop_;
-    uint64_t class_id = 0;
-    thread_local PMEMoid string_key_;
-#endif
+int Tree::compare(const char* k1, const char* k2)
+{
+    return compare(k1, k2, meta.key_len);
+}
 
-// Inner
-int Inner::find(key_type key)
+Node* Tree::findInnerChild(Node* inner, const char* key, short* pos)
 {
     int r;
-#ifdef PREFIX
-    #ifdef ADAPTIVE_PREFIX 
-        int node_prefix_offset = this->prefix_offset();
-/*	int bytes_to_cmp = node_prefix_offset - key_prefix_offset_; // less comparisons but more ifs, not faster...
-	if (node_prefix_offset == 0)
-	    common_prefix_ = false;
-	else if (!(common_prefix_ && bytes_to_cmp <= 0))
-	{
-	    int res = this->ent[1].key.compare(key, key_prefix_offset_, bytes_to_cmp);
-            if (res != 0) // partial key before prefix do not match, either left most child or right most child
-                return res < 0? this->count() : 0;
-	    else
-		common_prefix_ = true;
-	}
-*/
-        int res = this->ent[1].key.compare(key, node_prefix_offset);
-        if (res != 0) // partial key before prefix do not match, either left most child or right most child
-            return res < 0? this->count() : 0;
-        if (key_prefix_offset_ != node_prefix_offset) // update search key prefix and offset if necessary
-        {
-            key_prefix_offset_ = node_prefix_offset;
-            key_prefix_ = getPrefixWithOffset(key.key, key.length, key_prefix_offset_);
-        }
-    #endif
-    #ifdef Binary_Search
-        int l = 1, mid; r = this->count();
+    if (meta.binary_search)
+    {
+        int l = 1, mid; r = getInnerCount(inner);
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (key_prefix_ <= this->ent[mid].key.prefix)
+            if (compare(key, getInnerKey(inner, mid)) <= 0)
                 r = mid - 1;
             else
                 l = mid + 1;
         }
-        if (r < this->count() && key_prefix_ == this->ent[r + 1].key.prefix) // not right most child and may have collision
+    }
+    else
+    {
+        int cnt = getInnerCount(inner);
+        for (r = 1; r <= cnt; r++)
+            if (compare(key, getInnerKey(inner, r)) <= 0)
+                break;
+        r--;
+    }
+    *pos = r;
+    return getInnerChild(inner, r);
+}
+
+char* Tree::searchLeaf(Node* leaf, const char* key)
+{
+    if (meta.enable_fp && meta.enable_simd)
+    {
+        char* cur_key;
+        int i;
+        // a. set every byte to key_hash in a 64B register
+        __m512i key_64B = _mm512_set1_epi8((char)key_hash_);
+
+        // b. load fp into another 64B register
+        __m512i fgpt_64B = _mm512_loadu_si512(&getLeafFP(leaf, 0)); // _mm512_loadu_si512, _mm512_load_si512 (64 align)
+
+        // c. compare them
+        __mmask64 mask = _mm512_cmpeq_epu8_mask(key_64B, fgpt_64B);
+
+        mask &= offset; // in case meta.leaf_key_num < 64
+        mask &= bitmap.bits; // only check existing entries
+        for (i = 0; mask; i++, mask >>= 1)
         {
-            int res = key.compare(ent[r + 1].key);
-            if (res > 0) // key > ent[r + 1], search right
-            {
-                for (++r; r <= this->count(); r++)
-                    if (key_prefix_ <= this->ent[r].key.prefix && key <= this->ent[r].key)
-                        break;
-                r --;
-            }
-            else if (res < 0) // key < ent[r + 1], search left
-            {
-                for (r; r > 0; r--)
-                    if (key_prefix_ >= this->ent[r].key.prefix && key >= this->ent[r].key)
-                        break;
-            }
+            cur_key = getLeafKey(leaf, i);
+            if ((mask & 1) && compare(key, cur_key) == 0)
+                return cur_key + meta.value_len;
         }
-    #else
-        for (r = 1; r <= this->count(); r++)
-            if (key_prefix_ <= this->ent[r].key.prefix && key <= this->ent[r].key)
-                break;
-        r--;
-    #endif
-#else
-    #ifdef Binary_Search
-        int l = 1, mid; r = this->count();
-        while (l <= r) {
-            mid = (l + r) >> 1;
-            if (key <= this->ent[mid].key)
-                r = mid - 1;
+    }
+    else
+    {
+        uint64_t bits = bitmap.bits;
+        char* cur_key = getLeafKey(leaf, 0);
+        uint32_t leaf_ent_size = meta.key_len + meta.value_len;
+        int i;
+        for (i = 0; bits != 0; i++, bits = bits >> 1, cur_key += leaf_ent_size) 
+        {
+            if (meta.enable_fp)
+                if ((bits & 1) && key_hash_ == getLeafFP(leaf, i) && compare(key, cur_key) == 0)
+                    return cur_key + meta.value_len;
             else
-                l = mid + 1;
+                if ((bits & 1) && compare(key, cur_key) == 0)
+                    return cur_key + meta.value_len;
         }
-    #else
-        for (r = 1; r <= this->count(); r++)
-            if (key <= this->ent[r].key)
-                break;
-        r--;
-    #endif
-#endif
-    return r;
-}
-
-Node* Inner::findChildSetPos(key_type key, short* pos)
-{
-    *pos = find(key);
-    return this->ent[*pos].child;
-}
-
-Node* Inner::findChild(key_type key)
-{
-    return this->ent[find(key)].child;
-}
-
-void Inner::insertChild(short index, key_type key, Node* child)
-{
-#ifdef ADAPTIVE_PREFIX
-    key.prefix = getPrefixWithOffset(key.key, key.length, this->prefix_offset());
-#endif
-    this->ent[index].key = key;
-    this->ent[index].child = child;
-}
-
-// Leaf
-Leaf::Leaf(const Leaf& leaf) 
-{
-    memcpy(this, &leaf, sizeof(Leaf));
-}
-
-void Leaf::insertEntry(key_type key, val_type val)
-{
-    int i = this->bitmap.first_zero();
-#ifdef FINGERPRINT
-    this->fp[i] = key_hash_;
-    clwb(&this->fp[i], sizeof(key_hash_));
-#endif
-
-#if defined(PM) && defined(STRING_KEY)
-    // allocate PM string key in wrapper, avoid holding locks for too long
-    // void* key_addr = allocate_size(&this->ent[i].key, key.length);
-    // std::memcpy(key_addr, key.key, key.length);
-    // clwb(key_addr, key.length);
-    this->ent[i].key = string_key_;
-    this->ent[i].len = key.length;
-#else
-    this->ent[i].key = key;
-#endif
-    this->ent[i].val = val;
-#if LEAF_KEY_NUM == 13 // assuming no fingerprint and 8B key/value
-    if (i >= 3) // if not in the first cacheline
-    {
-        clwb(&this->ent[i], sizeof(LeafEntry));
-        sfence();
     }
-#else
-    clwb(&this->ent[i], sizeof(LeafEntry));
+    return nullptr;
+}
+
+void Tree::insertLeafEntry(Node* leaf, const char* key, char* val)
+{
+    char* insert_key_pos;
+    Bitmap* bmp = getLeafBitmap(leaf);
+    int i = bmp->first_zero(offset);
+
+    if (meta.enable_fp)
+    {
+        getLeafFP(leaf, i) = key_hash_;
+        if (i >= 48) // if not on the first cache line with bitmap
+            clwb(&getLeafFP(leaf, i), sizeof(key_hash_));
+    }
+    insert_key_pos = getLeafKey(leaf, i);
+    std::memcpy(insert_key_pos, key, meta.key_len);
+    std::memcpy(insert_key_pos + meta.key_len, val, meta.value_len);
+    clwb(insert_key_pos, meta.key_len + meta.value_len);
     sfence();
-#endif
-    this->bitmap.set(i);
-    clwb(&this->bitmap, sizeof(Bitmap));
+
+    bmp->set(i);
+    clwb(leaf, 64); // flush first cacheline (Bitmap)
     sfence();
 }
 
-int Leaf::findKey(key_type key)
-{
-#if defined(FINGERPRINT) && defined(SIMD) // AVX512
-    // a. set every byte to key_hash in a 64B register
-    __m512i key_64B = _mm512_set1_epi8((char)key_hash_);
-
-    // b. load fp into another 64B register
-    __m512i fgpt_64B = _mm512_loadu_si512(this->fp); // _mm512_loadu_si512, _mm512_load_si512 (64 align)
-
-    // c. compare them
-    __mmask64 mask = _mm512_cmpeq_epu8_mask(key_64B, fgpt_64B);
-
-    mask &= OFFSET; // in case LEAF_KEY_NUM < 64
-    mask &= this->bitmap.bits; // only check existing entries
-    for (int i = 0; mask; i++, mask >>= 1)
-    #if defined(PM) && defined(STRING_KEY)
-        if ((mask & 1) && compare(key.key, pmemobj_direct(this->ent[i].key), key.length, this->ent[i].len) == 0)
-    #else
-        if ((mask & 1) && key == this->ent[i].key)
-    #endif
-            return i;
-#else
-    uint64_t bits = this->bitmap.bits;
-    for (int i = 0; bits != 0; i++) 
-    {
-    #ifdef FINGERPRINT
-        #if defined(PM) && defined(STRING_KEY)
-            if ((bits & 1) && key_hash_ == this->fp[i] && compare(key.key, pmemobj_direct(this->ent[i].key), key.length, this->ent[i].len) == 0) // key found
-        #else
-            if ((bits & 1) && key_hash_ == this->fp[i] && key == this->ent[i].key) // key found
-        #endif
-    #else
-        #if defined(PM) && defined(STRING_KEY)
-            if ((bits & 1) && compare(key.key, pmemobj_direct(this->ent[i].key), key.length, this->ent[i].len) == 0) // key found
-        #else
-            if ((bits & 1) && key == this->ent[i].key) // key found
-        #endif
-    #endif
-            return i;
-        bits = bits >> 1;
-    }
-#endif
-    return -1;
-}
-
-// Tree
-void tree::initOp(key_type& key)
-{
-#ifdef FINGERPRINT
-    key_hash_ = getOneByteHash(key);
-#endif
-}
-
-void tree::resetPrefix(key_type& key)
-{
-#ifdef PREFIX
-    key_prefix_ = key.prefix;
-    #ifdef ADAPTIVE_PREFIX
-	common_prefix_ = false;
-        key_prefix_offset_ = 0;
-    #endif
-#endif
-}
-
-Leaf* tree::findLeaf(key_type key, uint64_t& version, bool lock)
+Node* Tree::findLeaf(const char* key, uint64_t& version, bool lock)
 {
     uint64_t currentVersion, previousVersion;
-    Node* current;
-    Inner* previous;
-    Leaf* leaf;
+    Node* current, previous;
     int i;
+    short pos;
 
 RetryFindLeaf: 
-    resetPrefix(key);
-    previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
         goto RetryFindLeaf;
     for (i = this->height; i > 0; i--)
     {
-    // #ifdef PREFETCH // minor degradation
-    //     prefetchInner(current);
-    // #endif
-        previous = (Inner*)current;
+        previous = current;
         previousVersion = currentVersion;
-        current = ((Inner*)current)->findChild(key);
+        current = findInnerChild(current, key, &pos);
         if (current->isLocked(currentVersion) || !previous->checkVersion(previousVersion))
             goto RetryFindLeaf;
     }
-    leaf = (Leaf*)current;
-    // #ifdef PREFETCH // significant decline
-    //     prefetchLeaf(leaf);
-    // #endif
     if (lock && !current->upgradeToWriter(currentVersion))
         goto RetryFindLeaf;
     version = currentVersion;
-    return leaf;
+    return current;
 }
 
-Leaf* tree::findLeafAssumeSplit(key_type key)
+Node* Tree::findLeafAssumeSplit(const char* key)
 {
-    uint64_t currentVersion, previousVersion;
     Node* current, * previous;
-    Leaf* leaf;
+    uint64_t currentVersion, previousVersion;
     int i;
 
 RetryFindLeafAssumeSplit:
-    resetPrefix(key);
-    previous = nullptr;
     current = this->root;
     if (current->isLocked(currentVersion) || current != this->root)
         goto RetryFindLeafAssumeSplit;
     pos_[0] = this->height;
     for (i = pos_[0]; i > 0; i--)
     {
-    // #ifdef PREFETCH // minor degradation
-    //     prefetchInner(current);
-    // #endif
-        anc_[i] = (Inner*)current;
+        anc_[i] = current;
         versions_[i] = currentVersion;
         previous = current;
         previousVersion = currentVersion;
-        if (!((Inner*)current)->isFull())
+        if (!isInnerFull(current))
             pos_[0] = i;
-        current = (((Inner*)current)->findChildSetPos(key, &pos_[i]));
+        current = findInnerChild(current, key, &pos_[i]);
         if (current->isLocked(currentVersion) || !previous->checkVersion(previousVersion))
             goto RetryFindLeafAssumeSplit;
     }
-    leaf = (Leaf*)current;
-    // #ifdef PREFETCH // improve by a little
-    //     prefetchLeaf(leaf);
-    // #endif
-    if (leaf->findKey(key) >= 0) // key already exists
+    if (searchLeaf(current, key) != nullptr) // key already exists
     {
-        if (leaf->checkVersion(currentVersion))
+        if (current->checkVersion(currentVersion))
             return nullptr;
         else
             goto RetryFindLeafAssumeSplit;
     }
-    if (!leaf->upgradeToWriter(currentVersion))
+    if (!current->upgradeToWriter(currentVersion)) // failed to acquire lock
         goto RetryFindLeafAssumeSplit;
-    return leaf;
+    return current;
 }
 
-bool tree::lockStack(Leaf* n) // ToDo: Is only locking top most ancester enough
+bool Tree::lockStack(Node* n) // ToDo: Is only locking top most ancester enough
 {
     int i, h = pos_[0];
     for (i = 1; i <= h; i++)
@@ -306,245 +173,260 @@ bool tree::lockStack(Leaf* n) // ToDo: Is only locking top most ancester enough
     return true;
 }
 
-bool tree::lookup(key_type key, val_type& val)
+bool Tree::lookup(const char* key, char* val)
 {
     uint64_t version;
-    Leaf* leaf;
-    int i;
+    Node* leaf;
+    char* value_ptr;
 
-    initOp(key);
+    initOp(key); // set fp if necessary
 
 RetryLookup:
     leaf = findLeaf(key, version, false);
-    if ((i = leaf->findKey(key)) >= 0)
-        val = leaf->ent[i].val;
+    value_ptr = searchLeaf(leaf, key);
+    if (value_ptr)
+        std::memcpy(val, value_ptr, meta.value_len);
     if (!leaf->checkVersion(version))
         goto RetryLookup;
-    return i >= 0;
+    return value_ptr != nullptr;
 }
 
-bool tree::update(key_type key, val_type new_val)
+bool Tree::update(const char* key, char* new_val)
 {
     uint64_t version;
-    Leaf* leaf;
-    int i;
+    Node* leaf;
+    char* value_ptr;
 
-    initOp(key);
+    initOp(key); // set fp if necessary
 
 RetryUpdate:
     leaf = findLeaf(key, version, true);
-    if ((i = leaf->findKey(key)) >= 0)
+    char* value_ptr = searchLeaf(leaf, key);
+    if (value_ptr)
     {
-        leaf->ent[i].val = new_val;
-        clwb(&leaf->ent[i].val, sizeof(val_type));
+        std::memcpy(value_ptr, new_val, meta.value_len);
+        clwb(value_ptr, meta.value_len);
         sfence();
     }
     leaf->unlock();
-    return i >= 0;
+    return value_ptr != nullptr;
 }
 
-bool tree::insert(key_type key, val_type val) 
+bool Tree::insert(const char* key, char* val) 
 {
-    Inner* current;
-    Leaf* leaf;
-    int i, r, count, cur_offset;
-    short p;
-
-    initOp(key);
+    Node* current, * leaf;
+    initOp(key); // set fp if necessary
 
 RetryInsert: 
     leaf = findLeafAssumeSplit(key);
-    if (!leaf) return false;
-    if (leaf->count() < LEAF_KEY_NUM) // no split
+    if (!leaf) return false; // key already exists
+    if (getLeafCount(leaf) < meta.leaf_key_num) // no split insert
     {
-        leaf->insertEntry(key, val);
+        insertLeafEntry(leaf, key, val);
         leaf->unlock();
         return true;
     }
-    else // need split
+    else // split insert
     {
+        Node* new_node;
+        char* start_key_pos;
+        int i, r, count, left_key_num, right_key_num;
+        uint32_t leaf_ent_size;
+        short p;
         if (!lockStack(leaf))
             goto RetryInsert;
-        // split insert
         // sort indexes of leaf entries, find middle split key
-        int sorted_pos[LEAF_KEY_NUM];
-        for (i = 0; i < LEAF_KEY_NUM; i++)
+        std::vector<int> sorted_pos(meta.leaf_key_num);
+        for (i = 0; i < meta.leaf_key_num; i++)
             sorted_pos[i] = i;
-        LeafEntry* entries = leaf->ent;
-        std::sort(sorted_pos, sorted_pos + LEAF_KEY_NUM, [entries](int i, int j){
-        #if defined(PM) && defined(STRING_KEY)
-            return compare(pmemobj_direct(entries[i].key), pmemobj_direct(entries[j].key), entries[i].len, entries[j].len) < 0;
-        #else
-            return entries[i].key < entries[j].key; 
-        #endif
-        });
-        int split_pos = LEAF_KEY_NUM / 2;
-    #ifdef STRING_KEY
-        #ifdef PM
-            key_type split_key = StringKey((char*)pmemobj_direct(leaf->ent[sorted_pos[split_pos]].key), leaf->ent[sorted_pos[split_pos]].len);
-        #else
-            key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
-        #endif
-        char* sk = new char[split_key.length];
-        std::memcpy(sk, split_key.key, split_key.length);
-        split_key.key = sk;
-    #else
-        key_type split_key = leaf->ent[sorted_pos[split_pos]].key;
-    #endif
+
+        struct less_than_key
+        {
+            char* first_key_pos;
+            uint32_t leaf_ent_size;
+            uint32_t key_len;
+
+            less_than_key(char* fkp, uint32_t les, uint32_t kl)
+            {
+                first_key_pos = fkp;
+                leaf_ent_size = les;
+                key_len = kl;
+            }     
+
+            inline bool operator() (int i, int j)
+            {
+                return compare(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len);
+            }
+        };
+        leaf_ent_size = meta.key_len + meta.value_len;
+        std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, i)), leaf_ent_size, meta.key_len);
+
+        int split_pos = meta.leaf_key_num / 2;
+        char* split_key = getLeafKey(leaf, split_pos);
         bool alt = leaf->alt();
 
         // alloc new leaf
-    #ifdef PM
-        Leaf* new_leaf = new (allocate_leaf(&leaf->next[1 - alt])) Leaf(*leaf);
-    #else
-        Leaf* new_leaf = new (allocate_leaf()) Leaf(*leaf);
-        leaf->next[1 - alt] = new_leaf; // track in unused ptr
-    #endif
+        if (meta.pop) // PM.
+        {
+            char* next_ptr_addr = getNextLeafPtrAddr(leaf, sizeof(PMEMoid) * (alt + 1));
+            new_node = alloc_leaf((PMEMoid*)next_ptr_addr);
+        }
+        else
+        {
+            new_node = alloc_leaf();
+            *(Node**)getNextLeafPtrAddr(leaf, sizeof(Node*) * (alt + 1)) = new_node;
+        }
+        std::memcpy(new_node, leaf, meta.leaf_size);
 
         // set bitmap of both leaves
+        Bitmap* bmp = getLeafBitmap(new_node);
         for (i = 0; i <= split_pos; i++)
-            new_leaf->bitmap.reset(sorted_pos[i]);
-        clwb(new_leaf, sizeof(Leaf));
-        leaf->bitmap.setBits(new_leaf->bitmap.bits);
-        leaf->bitmap.flip();
-        clwb(&leaf->bitmap, sizeof(Bitmap));
+            bmp->reset(sorted_pos[i]);
+        clwb(new_node, meta.leaf_size);
+        uint64_t bits = bmp->bits;
+        bmp = getLeafBitmap(leaf);
+        bmp->setBits(bits);
+        bmp->flip(offset);
+        clwb(bmp, sizeof(Bitmap));
         sfence();
 
         // insert new entry, unlock leaf if not root
-        if (key <= split_key) 
-            leaf->insertEntry(key, val);
-        else
-            new_leaf->insertEntry(key, val);
-        new_leaf->unlock();
+        current = new_node;
+        if (compare(key, split_key) <= 0)
+            current = leaf;
+        insertLeafEntry(current, key, val);
+        new_node->unlock();
         if (pos_[0] > 0)
             leaf->unlockFlipAlt(alt);
 
         // Update inners
-        Node* new_child = new_leaf;
-        Inner* new_inner;
+        Node* new_inner;
         int h = pos_[0];
+        left_key_num = meta.inner_key_num / 2;
+        right_key_num = meta.inner_key_num - left_key_num;
         for (int level = 1; level <= h; level++)
         {
             current = anc_[level];
-            count = current->count();
-            p = pos_[level] + 1;
-            if (count < INNER_KEY_NUM) // if last inner to update
+            count = getInnerCount(current);
+            p = pos_[level] + 1; // insert pos
+            if (count < meta.inner_key_num) // if last inner to update
             {
-                for (i = count; i >= p; i--)
-                    current->ent[i + 1] = current->ent[i];
-                current->insertChild(p, split_key, new_child);
-                current->count() ++;
-                #ifdef ADAPTIVE_PREFIX
-                    current->adjustPrefix(p);
-                #endif
+                // if (p <= count)
+                // {
+                    start_key_pos = getInnerKey(current, p);
+                    std::memmove(start_key_pos + leaf_ent_size, start_key_pos, leaf_ent_size * (count - p + 1));
+                // }
+                insertInnerEntry(current, split_key, new_node, p);
+                getInnerCount(current) ++;
                 current->unlock();
                 return true;
             }
-            new_inner = new (allocate_inner()) Inner(); // else split inner
-            #ifdef ADAPTIVE_PREFIX
-                cur_offset = current->prefix_offset();
-                new_inner->prefix_offset() = cur_offset;
-            #endif
-#define LEFT_KEY_NUM (INNER_KEY_NUM / 2)
-#define RIGHT_KEY_NUM (INNER_KEY_NUM - LEFT_KEY_NUM)
-            current->count() = LEFT_KEY_NUM;
-            if (p <= LEFT_KEY_NUM) // insert to left inner
+
+            new_inner = alloc_inner(); // split inner
+            
+            if (p <= left_key_num) // insert to left inner
             {
-                for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; r >= 0; r--, i--)
-                    new_inner->ent[r] = current->ent[i];
-                for (i = LEFT_KEY_NUM - 1; i >= p; i--)
-                    current->ent[i + 1] = current->ent[i];
-                current->insertChild(p, split_key, new_child);
-                split_key = new_inner->ent[0].key;
-                new_inner->count() = RIGHT_KEY_NUM;
-                #ifdef ADAPTIVE_PREFIX
-                    current->adjustPrefix(p);
-                    new_inner->prefix_offset() = cur_offset;
-                    new_inner->adjustPrefix();
-                #endif
+                std::memcpy(getInnerKey(new_inner, 0), getInnerKey(current, left_key_num + 1), leaf_ent_size * (right_key_num));
+                start_key_pos = getInnerKey(current, p);
+                std::memmove(start_key_pos + leaf_ent_size, start_key_pos, leaf_ent_size * (left_key_num - p + 1));
+                insertInnerEntry(current, split_key, new_node, p);
+                getInnerCount(current) = left_key_num + 1;
+                getInnerCount(new_inner) = right_key_num - 1;
+
+                // for (r = right_key_num, i = INNER_KEY_NUM; r >= 0; r--, i--)
+                //     new_inner->ent[r] = current->ent[i];
+                // for (i = left_key_num - 1; i >= p; i--)
+                //     current->ent[i + 1] = current->ent[i];
+                // current->insertChild(p, split_key, new_node);
+                // split_key = new_inner->ent[0].key;
+                // new_inner->count() = right_key_num;
             }
             else
             {
-                for (r = RIGHT_KEY_NUM, i = INNER_KEY_NUM; i >= p; i--, r--)
-                    new_inner->ent[r] = current->ent[i];
-                new_inner->insertChild(r, split_key, new_child);
-                p = r;
-                for (--r; r >= 0; r--, i--)
-                    new_inner->ent[r] = current->ent[i];
-                split_key = new_inner->ent[0].key;
-                new_inner->count() = RIGHT_KEY_NUM;
-                #ifdef ADAPTIVE_PREFIX
-                    current->adjustPrefix();
-                    new_inner->prefix_offset() = cur_offset;
-                    new_inner->adjustPrefix(p);
-                #endif
+                std::memcpy(getInnerKey(new_inner, p - left_key_num), getInnerKey(current, p), leaf_ent_size * (count - p + 1));
+                insertInnerEntry(new_inner, split_key, new_node, p - right_key_num);
+                std::memcpy(getInnerKey(new_inner, 0), getInnerKey(current, left_key_num + 1), leaf_ent_size * (p - right_key_num));
+                getInnerCount(current) = left_key_num;
+                getInnerCount(new_inner) = right_key_num;
+                
+                // for (r = right_key_num, i = INNER_KEY_NUM; i >= p; i--, r--)
+                //     new_inner->ent[r] = current->ent[i];
+                // new_inner->insertChild(r, split_key, new_node);
+                // p = r;
+                // for (--r; r >= 0; r--, i--)
+                //     new_inner->ent[r] = current->ent[i];
+                // split_key = new_inner->ent[0].key;
+                // new_inner->count() = right_key_num;
             }
-            new_child = new_inner;
+            split_key = getInnerKey(new_inner, 0);
+            new_node = new_inner;
             if (level < h) // do not unlock root
                 current->unlock();
         }
 
         // new root
-        new_inner = new (allocate_inner()) Inner();
+        new_inner = alloc_inner();
         while (!new_inner->lock()) {}
-        new_inner->count() = 1;
-        new_inner->ent[0].child = this->root;
-        // #ifdef ADAPTIVE_PREFIX
-        //     new_inner->prefix_offset() = split_key.length;
-        // #endif
-        new_inner->insertChild(1, split_key, new_child);
+        getInnerCount(new_inner) = 1;
+        start_key_pos = getInnerChild(new_inner, 0);
+        *(Node**)start_key_pos = this->root;
+        insertInnerEntry(new_inner, split_key, new_node, 1);
 
-        Node* old_root = this->root;
+        // new_inner->count() = 1;
+        // new_inner->ent[0].child = this->root;
+        // new_inner->insertChild(1, split_key, new_node);
+
+        current = this->root;
         this->root = new_inner;
         if (++(this->height) > MAX_HEIGHT)
             printf("Stack overflow!\n");
         new_inner->unlock();
         if (this->height > 1) // previous root is a nonleaf
-            ((Inner*)old_root)->unlock();
+            current->unlock();
         else // previous root is a leaf
-            ((Leaf*)old_root)->unlockFlipAlt(alt);
+            current->unlockFlipAlt(alt);
         return true;
     }
 }
 
-void tree::rangeScan(key_type start_key, ScanHelper& sh)
-{
-    Leaf* leaf, * next_leaf;
-    uint64_t leaf_version, next_version, bits;
-    int i;
-    // std::vector<Leaf*> leaves; // ToDo: is phantom allowed?
+// void Tree::rangeScan(key_type start_key, ScanHelper& sh)
+// {
+//     Leaf* leaf, * next_leaf;
+//     uint64_t leaf_version, next_version, bits;
+//     int i;
+//     // std::vector<Leaf*> leaves; // ToDo: is phantom allowed?
 
-    initOp(start_key);
+//     initOp(start_key);
 
-RetryScan:
-    sh.reset();
-    leaf = findLeaf(start_key, leaf_version, false);
-    bits = leaf->bitmap.bits;
-    for (int i = 0; bits != 0; i++, bits = bits >> 1)
-    #if defined(PM) && defined(STRING_KEY)
-        if ((bits & 1) && compare((char*)pmemobj_direct(leaf->ent[i].key), start_key.key, leaf->ent[i].len, start_key.length) >= 0)
-    #else
-        if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
-    #endif
-            sh.scanEntry(leaf->ent[i]);
+// RetryScan:
+//     sh.reset();
+//     leaf = findLeaf(start_key, leaf_version, false);
+//     bits = leaf->bitmap.bits;
+//     for (int i = 0; bits != 0; i++, bits = bits >> 1)
+//     #if defined(PM) && defined(STRING_KEY)
+//         if ((bits & 1) && compare((char*)pmemobj_direct(leaf->ent[i].key), start_key.key, leaf->ent[i].len, start_key.length) >= 0)
+//     #else
+//         if ((bits & 1) && leaf->ent[i].key >= start_key) // compare with key in first leaf
+//     #endif
+//             sh.scanEntry(leaf->ent[i]);
 
-    while(!sh.stop())
-    {
-        next_leaf = leaf->sibling();
-        if (!next_leaf) // end of leaves
-        {
-            if (!leaf->checkVersion(leaf_version))
-                goto RetryScan;
-            return;
-        }
-        if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
-            goto RetryScan;
-        leaf = next_leaf;
-        leaf_version = next_version;
-        bits = leaf->bitmap.bits;
-        for (i = 0; bits != 0; i++, bits = bits >> 1) 
-            if (bits & 1) // entry found
-                sh.scanEntry(leaf->ent[i]);
-    }
-}
+//     while(!sh.stop())
+//     {
+//         next_leaf = leaf->sibling();
+//         if (!next_leaf) // end of leaves
+//         {
+//             if (!leaf->checkVersion(leaf_version))
+//                 goto RetryScan;
+//             return;
+//         }
+//         if (next_leaf->isLocked(next_version) || !leaf->checkVersion(leaf_version))
+//             goto RetryScan;
+//         leaf = next_leaf;
+//         leaf_version = next_version;
+//         bits = leaf->bitmap.bits;
+//         for (i = 0; bits != 0; i++, bits = bits >> 1) 
+//             if (bits & 1) // entry found
+//                 sh.scanEntry(leaf->ent[i]);
+//     }
+// }
 

@@ -293,7 +293,7 @@ public:
         if (m.pop) // PM. Parse existing Tree metas 
         {
             size_t root_size = pmemobj_root_size(m.pop);
-            assert(root_size > 0 && "Should expand root before calling init function")
+            assert(root_size > 0 && "Should expand root before calling init function");
             int tree_cnt = root_size / sizeof(Tree);
             printf("Current pop contains at most %d Trees\n", tree_cnt);
 

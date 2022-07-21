@@ -82,12 +82,12 @@ bool tree_wrapper::find(const char *key, size_t key_sz, char *value_out)
 
 bool tree_wrapper::insert(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
-    return t_->insert(key, value);
+    return t_->insert(key, const_cast<char*>(value));
 }
 
 bool tree_wrapper::update(const char *key, size_t key_sz, const char *value, size_t value_sz)
 {
-    return t_->update(key, value);
+    return t_->update(key, const_cast<char*>(value));
 }
 
 bool tree_wrapper::remove(const char *key, size_t key_sz)

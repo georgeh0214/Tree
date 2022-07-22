@@ -3,23 +3,24 @@
 Node* Tree::findInnerChild(Node* inner, const char* key, short* pos)
 {
     int r;
+    uint32_t inner_ent_size = meta.key_len + sizeof(Node*);
     if (meta.binary_search)
     {
         int l = 1, mid; r = getInnerCount(inner);
+        char* start_key_pos = getInnerKey(inner, 0);
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (compareKey(key, getInnerKey(inner, mid), meta.key_len) <= 0)
+            if (compareKey(key, start_key_pos + mid * inner_ent_size, meta.key_len) <= 0)
                 r = mid - 1;
             else
                 l = mid + 1;
         }
-        *pos = --r;
+        *pos = r;
         return getInnerChild(inner, r);
     }
     else
     {
         char* inner_key_pos = getInnerKey(inner, 1);
-        uint32_t inner_ent_size = meta.key_len + sizeof(Node*);
         int cnt = getInnerCount(inner);
         for (r = 1; r <= cnt; r++, inner_key_pos += inner_ent_size)
             if (compareKey(key, inner_key_pos, meta.key_len) <= 0)

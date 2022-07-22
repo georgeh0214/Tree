@@ -322,7 +322,7 @@ RetryInsert:
                 return true;
             }
 
-            new_inner = new (alloc_inner()) Node(); // split inner
+            new_inner = alloc_inner(); // split inner
             
             if (p <= left_key_num) // insert to left inner
             {
@@ -365,7 +365,7 @@ RetryInsert:
         }
 
         // new root
-        new_inner = new (alloc_inner()) Node();
+        new_inner = alloc_inner();
         while (!new_inner->lock()) {}
         getInnerCount(new_inner) = 1;
         *(Node**)(getInnerKey(new_inner, 0) + meta.key_len) = this->root;

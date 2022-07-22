@@ -344,8 +344,8 @@ RetryInsert:
             else
             {
                 std::memcpy(getInnerKey(new_inner, p - left_key_num), getInnerKey(current, p), leaf_ent_size * (count - p + 1));
-                insertInnerEntry(new_inner, split_key, new_node, p - right_key_num);
-                std::memcpy(getInnerKey(new_inner, 0), getInnerKey(current, left_key_num + 1), leaf_ent_size * (p - right_key_num));
+                insertInnerEntry(new_inner, split_key, new_node, p - left_key_num - 1);
+                std::memcpy(getInnerKey(new_inner, 0), getInnerKey(current, left_key_num + 1), leaf_ent_size * (p - left_key_num - 1));
                 getInnerCount(current) = left_key_num;
                 getInnerCount(new_inner) = right_key_num;
                 

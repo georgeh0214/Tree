@@ -109,7 +109,7 @@ public:
 // leaf only
     bool alt() { return versionLock.load() & 0b1; }
     void unlockFlipAlt(bool alt) { alt? versionLock.fetch_add(0b1) : versionLock.fetch_add(0b11); }
-} __attribute__((aligned(64)));
+};
 
 // struct Inner : public Node
 // {

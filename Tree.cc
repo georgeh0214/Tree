@@ -236,7 +236,7 @@ RetryInsert:
         if (!lockStack(leaf))
             goto RetryInsert;
         // sort indexes of leaf entries, find middle split key
-        std::vector<int> sorted_pos(meta.leaf_key_num);
+        thread_local std::vector<int> sorted_pos(meta.leaf_key_num);
         for (i = 0; i < meta.leaf_key_num; i++)
             sorted_pos[i] = i;
 
@@ -255,11 +255,11 @@ RetryInsert:
 
             inline bool operator() (int i, int j)
             {
-                return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len);
+                return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
             }
         };
         leaf_ent_size = meta.key_len + meta.value_len;
-        std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, i), leaf_ent_size, meta.key_len));
+        std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, 0), leaf_ent_size, meta.key_len));
 
         int split_pos = meta.leaf_key_num / 2;
         char* split_key = getLeafKey(leaf, split_pos);
@@ -268,7 +268,7 @@ RetryInsert:
         // alloc new leaf
         if (meta.pop) // PM.
         {
-            char* next_ptr_addr = (char*)getNextLeafPtrAddr(leaf, sizeof(PMEMoid) * (alt + 1));
+            void* next_ptr_addr = getNextLeafPtrAddr(leaf, sizeof(PMEMoid) * (alt + 1));
             new_node = alloc_leaf((PMEMoid*)next_ptr_addr);
         }
         else

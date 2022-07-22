@@ -299,6 +299,28 @@ RetryInsert:
         if (pos_[0] > 0)
             leaf->unlockFlipAlt(alt);
 
+        // debug
+        bmp = getLeafBitmap(leaf);
+        printf("Leaf has: %d records\n", bmp->count());
+        for (int i = 0; i < 64; i++)
+        {
+            if (bmp->test(i) && compare(getLeafKey(leaf, i), split_key, meta.key_len) > 0)
+            {
+                printf("Wrong key at leaf!\n");
+            }
+        }
+
+        bmp = getLeafBitmap(new_node);
+        printf("New node has: %d records\n", bmp->count());
+        for (int i = 0; i < 64; i++)
+        {
+            if (bmp->test(i) && compare(getLeafKey(new_node, i), split_key, meta.key_len) <= 0)
+            {
+                printf("Wrong key at new node!\n");
+            }
+        }
+
+
         // Update inners
         Node* new_inner;
         int h = pos_[0];

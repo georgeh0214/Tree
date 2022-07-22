@@ -1,10 +1,5 @@
 #include "Tree.h"
 
-int Tree::compare(const char* k1, const char* k2)
-{
-    return compareKey(k1, k2, meta.key_len);
-}
-
 Node* Tree::findInnerChild(Node* inner, const char* key, short* pos)
 {
     int r;
@@ -13,22 +8,25 @@ Node* Tree::findInnerChild(Node* inner, const char* key, short* pos)
         int l = 1, mid; r = getInnerCount(inner);
         while (l <= r) {
             mid = (l + r) >> 1;
-            if (compare(key, getInnerKey(inner, mid)) <= 0)
+            if (compareKey(key, getInnerKey(inner, mid), meta.key_len) <= 0)
                 r = mid - 1;
             else
                 l = mid + 1;
         }
+        *pos = --r;
+        return getInnerChild(inner, r);
     }
     else
     {
+        char* inner_key_pos = getInnerKey(inner, 1);
+        uint32_t inner_ent_size = meta.key_len + sizeof(Node*);
         int cnt = getInnerCount(inner);
-        for (r = 1; r <= cnt; r++)
-            if (compare(key, getInnerKey(inner, r)) <= 0)
+        for (r = 1; r <= cnt; r++, inner_key_pos += inner_ent_size)
+            if (compareKey(key, inner_key_pos, meta.key_len) <= 0)
                 break;
-        r--;
+        *pos = r - 1;
+        return *(Node**)(inner_key_pos - sizeof(Node*));
     }
-    *pos = r;
-    return getInnerChild(inner, r);
 }
 
 char* Tree::searchLeaf(Node* leaf, const char* key)
@@ -51,7 +49,7 @@ char* Tree::searchLeaf(Node* leaf, const char* key)
         for (i = 0; mask; i++, mask >>= 1)
         {
             cur_key = getLeafKey(leaf, i);
-            if ((mask & 1) && compare(key, cur_key) == 0)
+            if ((mask & 1) && compareKey(key, cur_key, meta.key_len) == 0)
                 return cur_key + meta.value_len;
         }
     }
@@ -64,10 +62,10 @@ char* Tree::searchLeaf(Node* leaf, const char* key)
         for (i = 0; bits != 0; i++, bits = bits >> 1, cur_key += leaf_ent_size) 
         {
             if (meta.enable_fp)
-                if ((bits & 1) && key_hash_ == getLeafFP(leaf, i) && compare(key, cur_key) == 0)
+                if ((bits & 1) && key_hash_ == getLeafFP(leaf, i) && compareKey(key, cur_key, meta.key_len) == 0)
                     return cur_key + meta.value_len;
             else
-                if ((bits & 1) && compare(key, cur_key) == 0)
+                if ((bits & 1) && compareKey(key, cur_key, meta.key_len) == 0)
                     return cur_key + meta.value_len;
         }
     }
@@ -278,7 +276,7 @@ RetryInsert:
 
         // insert new entry, unlock leaf if not root
         current = new_node;
-        if (compare(key, split_key) <= 0)
+        if (compareKey(key, split_key, meta.key_len) <= 0)
             current = leaf;
         insertLeafEntry(current, key, val);
         new_node->unlock();

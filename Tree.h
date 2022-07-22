@@ -412,6 +412,7 @@ private:
 
     inline int compare(const char* k1, const char* k2);
 
+
     // Inner
     inline uint32_t& getInnerCount(Node* inner)
     {
@@ -483,13 +484,7 @@ private:
     // return nullptr if key is found in reached leaf node, otherwise lock and return the leaf. Will also keep all nodes traversed & versions in stacks
     Node* findLeafAssumeSplit(const char* key);
 
-    bool lockStack(Node* n);
-
-
-    
-    
-
-    
+    bool lockStack(Node* n); 
 } __attribute__((aligned(256)));
 
 static inline unsigned long long rdtsc(void)

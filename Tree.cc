@@ -231,7 +231,7 @@ RetryInsert:
         Node* new_node;
         char* start_key_pos;
         int i, r, count, left_key_num, right_key_num;
-        uint32_t leaf_ent_size;
+        uint32_t leaf_ent_size, key_len;
         short p;
         if (!lockStack(leaf))
             goto RetryInsert;
@@ -240,32 +240,12 @@ RetryInsert:
         for (i = 0; i < meta.leaf_key_num; i++)
             sorted_pos[i] = i;
 
-        // struct less_than_key
-        // {
-        //     char* first_key_pos;
-        //     uint32_t leaf_ent_size;
-        //     uint32_t key_len;
 
-        //     less_than_key(char* fkp, uint32_t les, uint32_t kl)
-        //     {
-        //         first_key_pos = fkp;
-        //         leaf_ent_size = les;
-        //         key_len = kl;
-        //     }     
-
-        //     inline bool operator() (int i, int j)
-        //     {
-        //         return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
-        //     }
-        // };
         leaf_ent_size = meta.key_len + meta.value_len;
-        // std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, 0), leaf_ent_size, meta.key_len));
-
-        //debug
-        char* first_key_pos = getLeafKey(leaf, 0);
-        uint32_t key_len = meta.key_len;
-        std::sort(sorted_pos.begin(), sorted_pos.end(), [first_key_pos, leaf_ent_size, key_len](int i, int j) {
-            return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
+        start_key_pos = getLeafKey(leaf, 0);
+        key_len = meta.key_len;
+        std::sort(sorted_pos.begin(), sorted_pos.end(), [start_key_pos, leaf_ent_size, key_len](int i, int j) {
+            return compareKey(start_key_pos + i * leaf_ent_size, start_key_pos + j * leaf_ent_size, key_len) < 0;
         });
 
         // debug 
@@ -278,7 +258,7 @@ RetryInsert:
         }
 
         int split_pos = meta.leaf_key_num / 2;
-        char* split_key = getLeafKey(leaf, split_pos);
+        char* split_key = getLeafKey(leaf, sorted_pos[split_pos]);
         bool alt = leaf->alt();
 
         // alloc new leaf

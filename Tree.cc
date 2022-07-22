@@ -304,7 +304,7 @@ RetryInsert:
         printf("Leaf has: %d records\n", bmp->count());
         for (int i = 0; i < 64; i++)
         {
-            if (bmp->test(i) && compare(getLeafKey(leaf, i), split_key, meta.key_len) > 0)
+            if (bmp->test(i) && compare(getLeafKey(leaf, i), split_key) > 0)
             {
                 printf("Wrong key at leaf!\n");
             }
@@ -314,7 +314,7 @@ RetryInsert:
         printf("New node has: %d records\n", bmp->count());
         for (int i = 0; i < 64; i++)
         {
-            if (bmp->test(i) && compare(getLeafKey(new_node, i), split_key, meta.key_len) <= 0)
+            if (bmp->test(i) && compare(getLeafKey(new_node, i), split_key) <= 0)
             {
                 printf("Wrong key at new node!\n");
             }

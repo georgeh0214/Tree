@@ -260,7 +260,11 @@ RetryInsert:
         // };
         leaf_ent_size = meta.key_len + meta.value_len;
         // std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, 0), leaf_ent_size, meta.key_len));
-        std::sort(sorted_pos.begin(), sorted_pos.end(), [getLeafKey(leaf, 0), leaf_ent_size, meta.key_len](int i, int j) {
+
+        //debug
+        char* first_key_pos = getLeafKey(leaf, 0);
+        uint32_t key_len = meta.key_len;
+        std::sort(sorted_pos.begin(), sorted_pos.end(), [first_key_pos, leaf_ent_size, key_len](int i, int j) {
             return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
         });
 

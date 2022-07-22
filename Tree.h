@@ -490,7 +490,7 @@ private:
     
 
     
-} __attribute__((aligned(64)));
+} __attribute__((aligned(256)));
 
 static inline unsigned long long rdtsc(void)
 {

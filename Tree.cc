@@ -271,7 +271,7 @@ RetryInsert:
         // debug 
         for (i = 1; i < 64; i++)
         {
-            if (compare(getLeafKey(leaf, i-1), getLeafKey(leaf, i)) >= 0)
+            if (compare(getLeafKey(leaf, sorted_pos[i-1]), getLeafKey(leaf, sorted_pos[i])) >= 0)
             {
                 printf("Wrong order after sort!\n");
             }

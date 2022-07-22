@@ -353,6 +353,7 @@ private:
     inline Node* alloc_inner()
     {
         char* inner = new char[meta.inner_size]; 
+        std::memset(inner, 0, meta.inner_size);
         assert(inner && "alloc_inner: new");
         assert(((uint64_t)inner) % 64 == 0 && "alloc_inner: not aligned by 64B");
         return (Node*)inner;

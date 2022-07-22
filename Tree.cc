@@ -240,26 +240,29 @@ RetryInsert:
         for (i = 0; i < meta.leaf_key_num; i++)
             sorted_pos[i] = i;
 
-        struct less_than_key
-        {
-            char* first_key_pos;
-            uint32_t leaf_ent_size;
-            uint32_t key_len;
+        // struct less_than_key
+        // {
+        //     char* first_key_pos;
+        //     uint32_t leaf_ent_size;
+        //     uint32_t key_len;
 
-            less_than_key(char* fkp, uint32_t les, uint32_t kl)
-            {
-                first_key_pos = fkp;
-                leaf_ent_size = les;
-                key_len = kl;
-            }     
+        //     less_than_key(char* fkp, uint32_t les, uint32_t kl)
+        //     {
+        //         first_key_pos = fkp;
+        //         leaf_ent_size = les;
+        //         key_len = kl;
+        //     }     
 
-            inline bool operator() (int i, int j)
-            {
-                return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
-            }
-        };
+        //     inline bool operator() (int i, int j)
+        //     {
+        //         return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
+        //     }
+        // };
         leaf_ent_size = meta.key_len + meta.value_len;
-        std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, 0), leaf_ent_size, meta.key_len));
+        // std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, 0), leaf_ent_size, meta.key_len));
+        std::sort(sorted_pos.begin(), sorted_pos.end(), [getLeafKey(leaf, 0), leaf_ent_size, meta.key_len](int i, int j) {
+            return compareKey(first_key_pos + i * leaf_ent_size, first_key_pos + j * leaf_ent_size, key_len) < 0;
+        });
 
         // debug 
         for (i = 1; i < 64; i++)

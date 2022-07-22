@@ -240,22 +240,12 @@ RetryInsert:
         for (i = 0; i < meta.leaf_key_num; i++)
             sorted_pos[i] = i;
 
-
         leaf_ent_size = meta.key_len + meta.value_len;
         start_key_pos = getLeafKey(leaf, 0);
         key_len = meta.key_len;
-        std::sort(sorted_pos.begin(), sorted_pos.end(), [start_key_pos, leaf_ent_size, key_len](int i, int j) {
+        std::sort(sorted_pos.begin(), sorted_pos.end(), [start_key_pos, leaf_ent_size, key_len] (int i, int j) {
             return compareKey(start_key_pos + i * leaf_ent_size, start_key_pos + j * leaf_ent_size, key_len) < 0;
         });
-
-        // debug 
-        for (i = 1; i < 64; i++)
-        {
-            if (compare(getLeafKey(leaf, sorted_pos[i-1]), getLeafKey(leaf, sorted_pos[i])) >= 0)
-            {
-                printf("Wrong order after sort!\n");
-            }
-        }
 
         int split_pos = meta.leaf_key_num / 2;
         char* split_key = getLeafKey(leaf, sorted_pos[split_pos]);
@@ -295,28 +285,6 @@ RetryInsert:
         if (pos_[0] > 0)
             leaf->unlockFlipAlt(alt);
 
-        // debug
-        bmp = getLeafBitmap(leaf);
-        printf("Leaf has: %d records\n", bmp->count());
-        for (int i = 0; i < 64; i++)
-        {
-            if (bmp->test(i) && compare(getLeafKey(leaf, i), split_key) > 0)
-            {
-                printf("Wrong key at leaf!\n");
-            }
-        }
-
-        bmp = getLeafBitmap(new_node);
-        printf("New node has: %d records\n", bmp->count());
-        for (int i = 0; i < 64; i++)
-        {
-            if (bmp->test(i) && compare(getLeafKey(new_node, i), split_key) <= 0)
-            {
-                printf("Wrong key at new node!\n");
-            }
-        }
-
-
         // Update inners
         Node* new_inner;
         int h = pos_[0];
@@ -329,11 +297,8 @@ RetryInsert:
             p = pos_[level] + 1; // insert pos
             if (count < meta.inner_key_num) // if last inner to update
             {
-                // if (p <= count)
-                // {
-                    start_key_pos = getInnerKey(current, p);
-                    std::memmove(start_key_pos + leaf_ent_size, start_key_pos, leaf_ent_size * (count - p + 1));
-                // }
+                start_key_pos = getInnerKey(current, p);
+                std::memmove(start_key_pos + leaf_ent_size, start_key_pos, leaf_ent_size * (count - p + 1));
                 insertInnerEntry(current, split_key, new_node, p);
                 getInnerCount(current) ++;
                 current->unlock();
@@ -350,14 +315,6 @@ RetryInsert:
                 insertInnerEntry(current, split_key, new_node, p);
                 getInnerCount(current) = left_key_num + 1;
                 getInnerCount(new_inner) = right_key_num - 1;
-
-                // for (r = right_key_num, i = INNER_KEY_NUM; r >= 0; r--, i--)
-                //     new_inner->ent[r] = current->ent[i];
-                // for (i = left_key_num - 1; i >= p; i--)
-                //     current->ent[i + 1] = current->ent[i];
-                // current->insertChild(p, split_key, new_node);
-                // split_key = new_inner->ent[0].key;
-                // new_inner->count() = right_key_num;
             }
             else
             {
@@ -366,15 +323,6 @@ RetryInsert:
                 std::memcpy(getInnerKey(new_inner, 0), getInnerKey(current, left_key_num + 1), leaf_ent_size * (p - left_key_num - 1));
                 getInnerCount(current) = left_key_num;
                 getInnerCount(new_inner) = right_key_num;
-                
-                // for (r = right_key_num, i = INNER_KEY_NUM; i >= p; i--, r--)
-                //     new_inner->ent[r] = current->ent[i];
-                // new_inner->insertChild(r, split_key, new_node);
-                // p = r;
-                // for (--r; r >= 0; r--, i--)
-                //     new_inner->ent[r] = current->ent[i];
-                // split_key = new_inner->ent[0].key;
-                // new_inner->count() = right_key_num;
             }
             split_key = getInnerKey(new_inner, 0);
             new_node = new_inner;
@@ -387,13 +335,7 @@ RetryInsert:
         while (!new_inner->lock()) {}
         getInnerCount(new_inner) = 1;
         *(Node**)(getInnerKey(new_inner, 0) + meta.key_len) = this->root;
-        // start_key_pos = getInnerChild(new_inner, 0);
-        // *(Node**)start_key_pos = this->root;
         insertInnerEntry(new_inner, split_key, new_node, 1);
-
-        // new_inner->count() = 1;
-        // new_inner->ent[0].child = this->root;
-        // new_inner->insertChild(1, split_key, new_node);
 
         current = this->root;
         this->root = new_inner;

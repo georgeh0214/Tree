@@ -485,7 +485,7 @@ private:
     Node* findLeafAssumeSplit(const char* key);
 
     bool lockStack(Node* n); 
-} __attribute__((aligned(256)));
+} __attribute__((aligned(64)));
 
 static inline unsigned long long rdtsc(void)
 {

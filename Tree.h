@@ -109,7 +109,7 @@ public:
 // leaf only
     bool alt() { return versionLock.load() & 0b1; }
     void unlockFlipAlt(bool alt) { alt? versionLock.fetch_add(0b1) : versionLock.fetch_add(0b11); }
-};
+} __attribute__((aligned(64)));
 
 // struct Inner : public Node
 // {
@@ -354,6 +354,7 @@ private:
     {
         char* inner = new char[meta.inner_size]; 
         assert(inner && "alloc_inner: new");
+        assert(((uint64_t)inner) % 64 == 0 && "alloc_inner: not aligned by 64B");
         return (Node*)inner;
     }
 
@@ -363,6 +364,7 @@ private:
         thread_local pobj_action act;
         *ptr = pmemobj_xreserve(meta.pop, &act, meta.leaf_size, 0, POBJ_CLASS_ID(class_id));
         assert(pmemobj_direct(*ptr) && "pmemobj_xreserve");
+        assert(((uint64_t)pmemobj_direct(*ptr)) % 256 == 0 && "alloc_leaf: not aligned by 256B");
         return (Node*)pmemobj_direct(*ptr);
     }
 
@@ -370,6 +372,7 @@ private:
     {
         char* leaf = new char[meta.leaf_size];
         assert(leaf && "alloc_leaf: new");
+        assert(((uint64_t)leaf) % 256 == 0 && "alloc_leaf: not aligned by 256B");
         return (Node*)leaf;
     }
 

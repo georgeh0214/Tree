@@ -9,8 +9,6 @@
 
 #define NEW_PERSIST // asm volatile
 
-#define PREFETCH // not effective
-
 inline static uint8_t getOneByteHash(const char* k, uint32_t len)
 {
     return std::_Hash_bytes(k, len, 1) & 0xff;
@@ -41,7 +39,6 @@ inline static int compareKey(const char* k1, const char* k2, uint32_t len)
         if (*k1++ != *k2++)
             return k1[-1] < k2[-1] ? -1 : 1;
     return 0;
-
 }
 
 class Bitmap

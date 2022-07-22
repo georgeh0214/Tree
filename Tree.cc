@@ -261,6 +261,15 @@ RetryInsert:
         leaf_ent_size = meta.key_len + meta.value_len;
         std::sort(sorted_pos.begin(), sorted_pos.end(), less_than_key(getLeafKey(leaf, 0), leaf_ent_size, meta.key_len));
 
+        // debug 
+        for (i = 1; i < 64; i++)
+        {
+            if (compare(getLeafKey(i-1), getLeafKey(i)) >= 0)
+            {
+                printf("Wrong order after sort!\n");
+            }
+        }
+
         int split_pos = meta.leaf_key_num / 2;
         char* split_key = getLeafKey(leaf, split_pos);
         bool alt = leaf->alt();

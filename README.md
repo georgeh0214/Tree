@@ -5,35 +5,35 @@ Implemented adaptive prefix optimization for string keys. The idea is to adaptiv
 
 # Some Recommanded Settings
 If key length <= 8 (integer keys) and running in DRAM: \
-INNER_KEY_NUM 38
-LEAF_KEY_NUM 64
-FINGERPRINT
-SIMD
+INNER_KEY_NUM 38 \
+LEAF_KEY_NUM 64 \
+FINGERPRINT \
+SIMD \
 
-If key length <= 8 (integer keys) and running in PM:
-INNER_KEY_NUM 38
-LEAF_KEY_NUM 13
-PM
-ALIGNED_ALLOC
+If key length <= 8 (integer keys) and running in PM: \
+INNER_KEY_NUM 38 \
+LEAF_KEY_NUM 13 \
+PM \
+ALIGNED_ALLOC \
 
-If key length > 8 (string keys) and running in DRAM:
-INNER_KEY_NUM 64
-LEAF_KEY_NUM 64
-FINGERPRINT
-SIMD
-Binary_Search
-STRING_KEY
-PREFIX 
-ADAPTIVE_PREFIX (optional, depending on key distribution and length)
+If key length > 8 (string keys) and running in DRAM: \
+INNER_KEY_NUM 64 \
+LEAF_KEY_NUM 64 \
+FINGERPRINT \
+SIMD \
+Binary_Search \
+STRING_KEY \
+PREFIX  \
+ADAPTIVE_PREFIX (optional, depending on key distribution and length) \
 
-If key length > 8 (string keys) and running in PM:
-INNER_KEY_NUM 17
-LEAF_KEY_NUM 64
-PM
-ALIGNED_ALLOC
-FINGERPRINT
-SIMD
-Binary_Search
-STRING_KEY
-PREFIX 
-ADAPTIVE_PREFIX (optional, depending on key distribution and length)
+If key length > 8 (string keys) and running in PM: \
+INNER_KEY_NUM 17 \
+LEAF_KEY_NUM 64 \
+PM \
+ALIGNED_ALLOC \
+FINGERPRINT \
+SIMD \
+Binary_Search \
+STRING_KEY \
+PREFIX  \
+ADAPTIVE_PREFIX (optional, depending on key distribution and length) \

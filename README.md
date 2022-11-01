@@ -4,7 +4,7 @@ A volatile/persistent B+-Tree that supports both integer and string keys
 Implemented adaptive prefix optimization for string keys. The idea is to adaptively change the short, in-place prefix as new keys are inserted (or after node split), such that no two keys share the same prefix in the same inner node.
 
 # Some Recommanded Settings
-If key length <= 8 (integer keys) and running in DRAM:
+If key length <= 8 (integer keys) and running in DRAM: \
 INNER_KEY_NUM 38
 LEAF_KEY_NUM 64
 FINGERPRINT

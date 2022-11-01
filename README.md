@@ -8,13 +8,13 @@ If key length <= 8 (integer keys) and running in DRAM: \
 INNER_KEY_NUM 38 \
 LEAF_KEY_NUM 64 \
 FINGERPRINT \
-SIMD \
+SIMD 
 
 If key length <= 8 (integer keys) and running in PM: \
 INNER_KEY_NUM 38 \
 LEAF_KEY_NUM 13 \
 PM \
-ALIGNED_ALLOC \
+ALIGNED_ALLOC 
 
 If key length > 8 (string keys) and running in DRAM: \
 INNER_KEY_NUM 64 \
@@ -24,7 +24,7 @@ SIMD \
 Binary_Search \
 STRING_KEY \
 PREFIX  \
-ADAPTIVE_PREFIX (optional, depending on key distribution and length) \
+ADAPTIVE_PREFIX (optional, depending on key distribution and length) 
 
 If key length > 8 (string keys) and running in PM: \
 INNER_KEY_NUM 17 \
@@ -36,4 +36,5 @@ SIMD \
 Binary_Search \
 STRING_KEY \
 PREFIX  \
-ADAPTIVE_PREFIX (optional, depending on key distribution and length) \
+ADAPTIVE_PREFIX (optional, depending on key distribution and length) 
+

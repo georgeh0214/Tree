@@ -18,15 +18,9 @@ COMMON_SOURCES= tree.cc
 # -----------------------------------------------------------------------------
 TARGETS=main tree_wrapper
 
-#wbtree fptree
-
 all: ${TARGETS}
 
 # -----------------------------------------------------------------------------
-# lbtree_wrapper: lbtree-src/lbtree_wrapper.hpp lbtree-src/lbtree_wrapper.cpp ${COMMON_DEPENDS}
-# 	${CC} -o liblbtree_wrapper.so ${CFLAGS} -fPIC -shared ${INCLUDE} lbtree-src/lbtree_wrapper.cpp ${COMMON_SOURCES} ${LIB}
-# lbtree: lbtree-src/lbtree.h lbtree-src/lbtree.cc ${COMMON_DEPENDS}
-# 	${CC} -o $@ ${CFLAGS} ${INCLUDE} lbtree-src/lbtree.cc ${COMMON_SOURCES} ${LIB}
 main: main.cpp tree.cc
 	${CC} -mavx512f -mavx512bw main.cpp tree.cc ${CFLAGS}
 
